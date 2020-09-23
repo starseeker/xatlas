@@ -8,6 +8,10 @@ endif()
 project(xatlas)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0)
+    # avoid the "‘nodiscard’ attribute directive ignored" warning
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
+endif()
 
 set(xatlas_SOURCES xatlas.h xatlas.cpp)
 add_library(xatlas STATIC ${xatlas_SOURCES})
