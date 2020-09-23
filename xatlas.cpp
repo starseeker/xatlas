@@ -113,7 +113,7 @@ Copyright (c) 2012 Brandon Pelfrey
 
 #define XA_UNUSED(a) ((void)(a))
 
-#define XA_MERGE_CHARTS 1
+#define XA_MERGE_CHARTS 0
 #define XA_MERGE_CHARTS_MIN_NORMAL_DEVIATION 0.5f
 #define XA_RECOMPUTE_CHARTS 1
 #define XA_CHECK_PARAM_WINDING 0
@@ -7881,6 +7881,7 @@ public:
 		m_invalidMeshGeometry.runDtors();
 	}
 
+    const Mesh* mesh(int i) const { return m_meshes[i]; }
 	uint32_t meshCount() const { return m_meshes.size(); }
 	const InvalidMeshGeometry &invalidMeshGeometry(uint32_t meshIndex) const { return m_invalidMeshGeometry[meshIndex]; }
 	bool chartsComputed() const { return m_chartsComputed; }
@@ -8099,6 +8100,7 @@ struct AddChartTaskArgs
 {
 	param::Chart *paramChart;
 	Chart *chart; // out
+    const Mesh* originalMesh = nullptr;
 };
 
 static void runAddChartTask(void *groupUserData, void *taskUserData)
@@ -8113,7 +8115,9 @@ static void runAddChartTask(void *groupUserData, void *taskUserData)
 	Mesh *mesh = paramChart->unifiedMesh();
 	Chart *chart = args->chart = XA_NEW(MemTag::Default, Chart);
 	chart->atlasIndex = -1;
-	chart->material = 0;
+
+    XA_ASSERT(args->originalMesh != nullptr);
+	chart->material = args->originalMesh->faceMaterial(paramChart->mapFaceToSourceFace(0));
 	chart->indexCount = mesh->indexCount();
 	chart->indices = mesh->indices().data;
 	chart->parametricArea = mesh->computeParametricArea();
@@ -8162,7 +8166,6 @@ struct Atlas
 	uint32_t getWidth() const { return m_width; }
 	uint32_t getHeight() const { return m_height; }
 	uint32_t getNumAtlases() const { return m_bitImages.size(); }
-	float getTexelsPerUnit() const { return m_texelsPerUnit; }
 	const Chart *getChart(uint32_t index) const { return m_charts[index]; }
 	uint32_t getChartCount() const { return m_charts.size(); }
 	const Array<AtlasImage *> &getImages() const { return m_atlasImages; }
@@ -8195,6 +8198,7 @@ struct Atlas
 				for (uint32_t k = 0; k < count; k++) {
 					AddChartTaskArgs &args = taskArgs[chartIndex];
 					args.paramChart = chartGroup->chartAt(k);
+                    args.originalMesh = paramAtlas->mesh(i);
 					Task task;
 					task.userData = &taskArgs[chartIndex];
 					task.func = runAddChartTask;
@@ -8292,25 +8296,19 @@ struct Atlas
 			return true;
 		}
 		// Estimate resolution and/or texels per unit if not specified.
-		m_texelsPerUnit = options.texelsPerUnit;
+		const float* texelsPerUnit = options.texelsPerUnit;
 		uint32_t resolution = options.resolution > 0 ? options.resolution + options.padding * 2 : 0;
-		const uint32_t maxResolution = m_texelsPerUnit > 0.0f ? resolution : 0;
-		if (resolution <= 0 || m_texelsPerUnit <= 0) {
-			if (resolution <= 0 && m_texelsPerUnit <= 0)
+		const uint32_t maxResolution = texelsPerUnit != nullptr ? resolution : 0;
+		if (resolution <= 0 || texelsPerUnit == nullptr) {
+			if (resolution <= 0 && texelsPerUnit == nullptr)
 				resolution = 1024;
 			float meshArea = 0;
 			for (uint32_t c = 0; c < chartCount; c++)
-				meshArea += m_charts[c]->surfaceArea;
+				meshArea += m_charts[c]->surfaceArea * square(texelsPerUnit[m_charts[c]->material]);
 			if (resolution <= 0) {
 				// Estimate resolution based on the mesh surface area and given texel scale.
-				const float texelCount = max(1.0f, meshArea * square(m_texelsPerUnit) / 0.75f); // Assume 75% utilization.
-				resolution = max(1u, nextPowerOfTwo(uint32_t(sqrtf(texelCount))));
-			}
-			if (m_texelsPerUnit <= 0) {
-				// Estimate a suitable texelsPerUnit to fit the given resolution.
 				const float texelCount = max(1.0f, meshArea / 0.75f); // Assume 75% utilization.
-				m_texelsPerUnit = sqrtf((resolution * resolution) / texelCount);
-				XA_PRINT("   Estimating texelsPerUnit as %g\n", m_texelsPerUnit);
+				resolution = max(1u, nextPowerOfTwo(uint32_t(sqrtf(texelCount))));
 			}
 		}
 		Array<float> chartOrderArray;
@@ -8323,7 +8321,7 @@ struct Atlas
 			// Compute chart scale
 			float scale = 1.0f;
 			if (chart->parametricArea != 0.0f) {
-				scale = sqrtf(chart->surfaceArea / chart->parametricArea) * m_texelsPerUnit;
+                scale = sqrtf(chart->surfaceArea / chart->parametricArea) * texelsPerUnit[chart->material];
 				XA_ASSERT(isFinite(scale));
 			}
 			// Translate, rotate and scale vertices. Compute extents.
@@ -8868,7 +8866,6 @@ private:
 	RadixSort m_radix;
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
-	float m_texelsPerUnit = 0.0f;
 	KISSRng m_rand;
 };
 
@@ -9577,10 +9574,6 @@ void PackCharts(Atlas *atlas, PackOptions packOptions)
 		XA_PRINT_WARNING("PackCharts: ComputeCharts must be called first.\n");
 		return;
 	}
-	if (packOptions.texelsPerUnit < 0.0f) {
-		XA_PRINT_WARNING("PackCharts: PackOptions::texelsPerUnit is negative.\n");
-		packOptions.texelsPerUnit = 0.0f;
-	}
 	// Cleanup atlas.
 	DestroyOutputMeshes(ctx);
 	if (atlas->utilization) {
@@ -9611,7 +9604,6 @@ void PackCharts(Atlas *atlas, PackOptions packOptions)
 	atlas->chartCount = packAtlas.getChartCount();
 	atlas->width = packAtlas.getWidth();
 	atlas->height = packAtlas.getHeight();
-	atlas->texelsPerUnit = packAtlas.getTexelsPerUnit();
 	if (atlas->atlasCount > 0) {
 		atlas->utilization = XA_ALLOC_ARRAY(internal::MemTag::Default, float, atlas->atlasCount);
 		for (uint32_t i = 0; i < atlas->atlasCount; i++)

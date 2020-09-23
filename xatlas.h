@@ -90,7 +90,6 @@ struct Atlas
 	uint32_t chartCount; // Total number of charts in all meshes.
 	uint32_t meshCount; // Number of output meshes. Equal to the number of times AddMesh was called.
 	float *utilization; // Normalized atlas texel utilization array. E.g. a value of 0.8 means 20% empty space. atlasCount in length.
-	float texelsPerUnit; // Equal to PackOptions texelsPerUnit if texelsPerUnit > 0, otherwise an estimated value to match PackOptions resolution.
 };
 
 // Create an empty atlas.
@@ -213,10 +212,11 @@ struct PackOptions
 	// Number of pixels to pad charts with.
 	uint32_t padding = 0;
 
+    // Texels per unit for each material. Must have the size corresponding to the number of materials.
 	// Unit to texel scale. e.g. a 1x1 quad with texelsPerUnit of 32 will take up approximately 32x32 texels in the atlas.
 	// If 0, an estimated value will be calculated to approximately match the given resolution.
 	// If resolution is also 0, the estimated value will approximately match a 1024x1024 atlas.
-	float texelsPerUnit = 0.0f;
+    float* texelsPerUnit = nullptr;
 
 	// If 0, generate a single atlas with texelsPerUnit determining the final resolution.
 	// If not 0, and texelsPerUnit is not 0, generate one or more atlases with that exact resolution.
