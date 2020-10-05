@@ -990,7 +990,7 @@ struct ArrayBase
 	// Insert the given element at the given index shifting all the elements up.
 	void insertAt(uint32_t index, const uint8_t *value)
 	{
-		XA_DEBUG_ASSERT(index >= 0 && index <= size);
+		XA_DEBUG_ASSERT(index <= size);
 		XA_DEBUG_ASSERT(value);
 		resize(size + 1, false);
 		XA_DEBUG_ASSERT(buffer);
@@ -1046,7 +1046,7 @@ struct ArrayBase
 	// Remove the element at the given index. This is an expensive operation!
 	void removeAt(uint32_t index)
 	{
-		XA_DEBUG_ASSERT(index >= 0 && index < size);
+		XA_DEBUG_ASSERT(index < size);
 		XA_DEBUG_ASSERT(buffer);
 		if (buffer) {
 			if (size > 1)
@@ -1059,7 +1059,7 @@ struct ArrayBase
 	// Element at index is swapped with the last element, then the array length is decremented.
 	void removeAtFast(uint32_t index)
 	{
-		XA_DEBUG_ASSERT(index >= 0 && index < size);
+		XA_DEBUG_ASSERT(index < size);
 		XA_DEBUG_ASSERT(buffer);
 		if (buffer) {
 			if (size > 1 && index != size - 1)
@@ -4189,8 +4189,8 @@ static void nlSparseMatrixDestroy(NLSparseMatrix* M)
 
 static void nlSparseMatrixAdd(NLSparseMatrix* M, uint32_t i, uint32_t j, double value)
 {
-	XA_DEBUG_ASSERT(i >= 0 && i <= M->m - 1);
-	XA_DEBUG_ASSERT(j >= 0 && j <= M->n - 1);
+	XA_DEBUG_ASSERT(i <= M->m - 1);
+	XA_DEBUG_ASSERT(j <= M->n - 1);
 	if (i == j)
 		M->diag[i] += value;
 	nlRowColumnAdd(&(M->row[i]), j, value);
@@ -4517,19 +4517,19 @@ static void nlSolverParameteri(NLContext *context, uint32_t pname, int param)
 
 static void nlSetVariable(NLContext *context, uint32_t index, double value)
 {
-	XA_DEBUG_ASSERT(index >= 0 && index <= context->nb_variables - 1);
+	XA_DEBUG_ASSERT(index <= context->nb_variables - 1);
 	NL_BUFFER_ITEM(context->variable_buffer[0], index) = value;
 }
 
 static double nlGetVariable(NLContext *context, uint32_t index)
 {
-	XA_DEBUG_ASSERT(index >= 0 && index <= context->nb_variables - 1);
+	XA_DEBUG_ASSERT(index <= context->nb_variables - 1);
 	return NL_BUFFER_ITEM(context->variable_buffer[0], index);
 }
 
 static void nlLockVariable(NLContext *context, uint32_t index)
 {
-	XA_DEBUG_ASSERT(index >= 0 && index <= context->nb_variables - 1);
+	XA_DEBUG_ASSERT(index <= context->nb_variables - 1);
 	context->variable_is_locked[index] = true;
 }
 
@@ -4567,7 +4567,7 @@ static void nlVectorToVariables(NLContext *context)
 
 static void nlCoefficient(NLContext *context, uint32_t index, double value)
 {
-	XA_DEBUG_ASSERT(index >= 0 && index <= context->nb_variables - 1);
+	XA_DEBUG_ASSERT(index <= context->nb_variables - 1);
 	if (context->variable_is_locked[index]) {
 		/*
 		 * Note: in al, indices are NLvariable indices,
