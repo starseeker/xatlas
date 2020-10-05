@@ -4189,8 +4189,8 @@ static void nlSparseMatrixDestroy(NLSparseMatrix* M)
 
 static void nlSparseMatrixAdd(NLSparseMatrix* M, uint32_t i, uint32_t j, double value)
 {
-	XA_DEBUG_ASSERT(i > 0 && i <= M->m - 1);
-	XA_DEBUG_ASSERT(j > 0 && j <= M->n - 1);
+	XA_DEBUG_ASSERT(i <= M->m - 1);
+	XA_DEBUG_ASSERT(j <= M->n - 1);
 	if (i == j)
 		M->diag[i] += value;
 	nlRowColumnAdd(&(M->row[i]), j, value);
