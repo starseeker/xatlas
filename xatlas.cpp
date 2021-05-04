@@ -9933,4 +9933,69 @@ const char *StringForEnum(ProgressCategory category)
 	return "";
 }
 
+/**
+ * @brief Call after ComputeCharts to extract chart info from the xatlas
+ * @param atlas pointer to the xatlas (after ComputeCharts was called)
+ * @param coords output vector that will be filled with UV coords (x, y)
+ *               of mesh vertices (local in a chart group)
+ * @param chartIds output vector that will be filled with pairs of
+ *                 chartGroupId, chartId (in that group) for every mesh face
+ * @param meshId id of the mesh for which the chart parametrization
+ * 				 should be extracted
+ */
+void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
+				   std::vector<std::pair<std::uint32_t, std::uint32_t>>& chartIds,
+				   std::uint32_t meshId)
+{
+	const float invalidCoordinate { std::numerical_limits<float>::max };
+	const std::pair<std::uint32_t, std::uint32_t> invalidChartId
+					 			{ std::numerical_limits<std::uint32_t>::max,
+					   		      std::numerical_limits<std::uint32_t>::max };
+
+	// Validate arguments and context state.
+	if (!atlas) {
+		XA_PRINT_WARNING("ExtractCharts: atlas is null.\n");
+		return;
+	}
+
+	const Context *ctx = (const Context *)atlas;
+	if (ctx->meshes.isEmpty()) {
+		XA_PRINT_WARNING("ExtractCharts: No meshes. Call AddMesh first.\n");
+		return;
+	}
+	if (meshId >= ctx->meshes.size()) {
+		XA_PRINT_WARNING("ExtractCharts: Mesh with specified meshId not found.\n");
+		return;
+	}
+	if (!ctx->paramAtlas.chartsComputed()) {
+		XA_PRINT_WARNING("ExtractCharts: ComputeCharts must be called first.\n");
+		return;
+	}
+
+	for (std::uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(mesdId); ++gid)
+	{
+		const internal::param::ChartGroup& chartGroup = *ctx->paramAtlas.chartGroupAt(meshId, gid);
+		for (std::uint32_t id = 0; id < chartGroup->chartCount(); ++id)
+		{
+			const internal::param::Chart& chart = *chartGroup->chartAt(k);
+			const auto& mesh = *chart->unifiedMesh();
+			for (std::uint32_t k = 0; k < mesh.vertexCount(); ++k)
+			{
+				auto vi = chart.mapChartVertexToSourceVertex(k);
+				coords.resize(2 * (vi + 1), invalidCoordinate);
+				coords[vi] = mesh.texcoord(k).x;
+				coords[vi + 1] = mesh.texcoord(k).y;
+
+				// store face-data information
+				if (k % 3 == 2)
+				{
+					auto fi = mapFaceToSourceFace(k / 3);
+					chartIds.resize(fi + 1, invalidChartId);
+					// store chartGroupId, chartId (local in that group)
+					chartIds[fi] = std::make_pair(gid, id);
+				}
+			}
+		}
+	}
+
 } // namespace xatlas
