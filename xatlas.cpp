@@ -9947,10 +9947,10 @@ void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
 				   std::vector<std::pair<std::uint32_t, std::uint32_t>>& chartIds,
 				   std::uint32_t meshId)
 {
-	const float invalidCoordinate { std::numerical_limits<float>::max };
+	const float invalidCoordinate { std::numeric_limits<float>::max() };
 	const std::pair<std::uint32_t, std::uint32_t> invalidChartId
-					 			{ std::numerical_limits<std::uint32_t>::max,
-					   		      std::numerical_limits<std::uint32_t>::max };
+					 			{ std::numeric_limits<std::uint32_t>::max(),
+					   		      std::numeric_limits<std::uint32_t>::max() };
 
 	// Validate arguments and context state.
 	if (!atlas) {
@@ -9972,13 +9972,13 @@ void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
 		return;
 	}
 
-	for (std::uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(mesdId); ++gid)
+	for (std::uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid)
 	{
 		const internal::param::ChartGroup& chartGroup = *ctx->paramAtlas.chartGroupAt(meshId, gid);
-		for (std::uint32_t id = 0; id < chartGroup->chartCount(); ++id)
+		for (std::uint32_t id = 0; id < chartGroup.chartCount(); ++id)
 		{
-			const internal::param::Chart& chart = *chartGroup->chartAt(k);
-			const auto& mesh = *chart->unifiedMesh();
+			const internal::param::Chart& chart = *chartGroup.chartAt(id);
+			const auto& mesh = *chart.unifiedMesh();
 			for (std::uint32_t k = 0; k < mesh.vertexCount(); ++k)
 			{
 				auto vi = chart.mapChartVertexToSourceVertex(k);
@@ -9989,7 +9989,7 @@ void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
 				// store face-data information
 				if (k % 3 == 2)
 				{
-					auto fi = mapFaceToSourceFace(k / 3);
+					auto fi = chart.mapFaceToSourceFace(k / 3);
 					chartIds.resize(fi + 1, invalidChartId);
 					// store chartGroupId, chartId (local in that group)
 					chartIds[fi] = std::make_pair(gid, id);
@@ -9997,5 +9997,6 @@ void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
 			}
 		}
 	}
+}
 
 } // namespace xatlas
