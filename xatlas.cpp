@@ -9944,13 +9944,13 @@ const char *StringForEnum(ProgressCategory category)
  * 				 should be extracted
  */
 void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
-				   std::vector<std::pair<std::uint32_t, std::uint32_t>>& chartIds,
-				   std::uint32_t meshId)
+				   std::vector<std::pair<uint32_t, uint32_t>>& chartIds,
+				   uint32_t meshId)
 {
 	const float invalidCoordinate { std::numeric_limits<float>::max() };
-	const std::pair<std::uint32_t, std::uint32_t> invalidChartId
-					 			{ std::numeric_limits<std::uint32_t>::max(),
-					   		      std::numeric_limits<std::uint32_t>::max() };
+	const std::pair<uint32_t, uint32_t> invalidChartId
+					 			{ std::numeric_limits<uint32_t>::max(),
+					   		      std::numeric_limits<uint32_t>::max() };
 
 	// Validate arguments and context state.
 	if (!atlas) {
@@ -9972,14 +9972,14 @@ void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
 		return;
 	}
 
-	for (std::uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid)
+	for (uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid)
 	{
 		const internal::param::ChartGroup& chartGroup = *ctx->paramAtlas.chartGroupAt(meshId, gid);
-		for (std::uint32_t id = 0; id < chartGroup.chartCount(); ++id)
+		for (uint32_t id = 0; id < chartGroup.chartCount(); ++id)
 		{
 			const internal::param::Chart& chart = *chartGroup.chartAt(id);
 			const auto& mesh = *chart.unifiedMesh();
-			for (std::uint32_t k = 0; k < mesh.vertexCount(); ++k)
+			for (uint32_t k = 0; k < mesh.vertexCount(); ++k)
 			{
 				auto vi = chart.mapChartVertexToSourceVertex(k);
 				coords.resize(2 * (vi + 1), invalidCoordinate);

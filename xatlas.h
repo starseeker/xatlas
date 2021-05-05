@@ -275,8 +275,8 @@ const char *StringForEnum(ProgressCategory category);
  * 				 should be extracted
  */
 void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
-				   std::vector<std::pair<std::uint32_t, std::uint32_t>>& chartIds,
-				   std::uint32_t meshId = 0);
+				   std::vector<std::pair<uint32_t, uint32_t>>& chartIds,
+				   uint32_t meshId = 0);
 
 } // namespace xatlas
 
