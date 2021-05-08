@@ -267,15 +267,12 @@ const char *StringForEnum(ProgressCategory category);
 /**
  * @brief Call after ComputeCharts to extract chart info from the xatlas
  * @param atlas pointer to the xatlas (after ComputeCharts was called)
- * @param coords output vector that will be filled with UV coords (x, y)
- *               of mesh vertices (local in a chart group)
- * @param chartIds output vector that will be filled with pairs of
- *                 chartGroupId, chartId (in that group) for every mesh face
+ * @param vertices output vector will be filled with chart parametrization
+ *                 (after filling it should have 3 * nMeshFaces vertices)
  * @param meshId id of the mesh for which the chart parametrization
  * 				 should be extracted
  */
-void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
-				   std::vector<std::pair<uint32_t, uint32_t>>& chartIds,
+void ExtractCharts(const Atlas* atlas, std::vector<Vertex>& vertices,
 				   uint32_t meshId = 0);
 
 } // namespace xatlas

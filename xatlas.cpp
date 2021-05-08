@@ -9936,22 +9936,14 @@ const char *StringForEnum(ProgressCategory category)
 /**
  * @brief Call after ComputeCharts to extract chart info from the xatlas
  * @param atlas pointer to the xatlas (after ComputeCharts was called)
- * @param coords output vector that will be filled with UV coords (x, y)
- *               of mesh vertices (local in a chart group)
- * @param chartIds output vector that will be filled with pairs of
- *                 chartGroupId, chartId (in that group) for every mesh face
+ * @param vertices output vector will be filled with chart parametrization
+ *                 (after filling it should have 3 * nMeshFaces vertices)
  * @param meshId id of the mesh for which the chart parametrization
  * 				 should be extracted
  */
-void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
-				   std::vector<std::pair<uint32_t, uint32_t>>& chartIds,
+void ExtractCharts(const Atlas* atlas, std::vector<Vertex>& vertices,
 				   uint32_t meshId)
 {
-	const float invalidCoordinate { std::numeric_limits<float>::max() };
-	const std::pair<uint32_t, uint32_t> invalidChartId
-					 			{ std::numeric_limits<uint32_t>::max(),
-					   		      std::numeric_limits<uint32_t>::max() };
-
 	// Validate arguments and context state.
 	if (!atlas) {
 		XA_PRINT_WARNING("ExtractCharts: atlas is null.\n");
@@ -9972,27 +9964,42 @@ void ExtractCharts(const Atlas* atlas, std::vector<float>& coords,
 		return;
 	}
 
+	Vertex invalidData { -1, -1, {0, 0}, 0 };
+	vertices.resize(ctx->paramAtlas.mesh(meshId)->indexCount(), invalidData);
+
 	for (uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid)
 	{
 		const internal::param::ChartGroup& chartGroup = *ctx->paramAtlas.chartGroupAt(meshId, gid);
 		for (uint32_t id = 0; id < chartGroup.chartCount(); ++id)
 		{
 			const internal::param::Chart& chart = *chartGroup.chartAt(id);
-			const auto& mesh = *chart.unifiedMesh();
-			for (uint32_t k = 0; k < mesh.vertexCount(); ++k)
-			{
-				auto vi = chart.mapChartVertexToSourceVertex(k);
-				coords.resize(2 * (vi + 1), invalidCoordinate);
-				coords[vi] = mesh.texcoord(k).x;
-				coords[vi + 1] = mesh.texcoord(k).y;
+			const internal::Mesh& mesh = *chart.unifiedMesh();
 
-				// store face-data information
-				if (k % 3 == 2)
+			// atlasId is not used, store local chart id (in this group)
+			int32_t atlasIndex = chart.isInvalid() ? -1
+												   : static_cast<int32_t>(id);
+			// use chart group id as chartIndex
+			int32_t chartIndex = chart.isInvalid() ? -1
+												   : static_cast<int32_t>(gid);
+
+			XA_ASSERT(chart.isInvalid() == false);
+
+			for (uint32_t fi = 0; fi < mesh.faceCount(); ++fi)
+			{
+				uint32_t sourceFaceId = chart.mapFaceToSourceFace(fi);
+
+				for (int k = 0; k < 3; ++k)
 				{
-					auto fi = chart.mapFaceToSourceFace(k / 3);
-					chartIds.resize(fi + 1, invalidChartId);
-					// store chartGroupId, chartId (local in that group)
-					chartIds[fi] = std::make_pair(gid, id);
+					uint32_t vi = mesh.vertexAt(3 * fi + k);
+					uint32_t sourceVi = chart.mapChartVertexToSourceVertex(vi);
+
+					// safe access with bound checking
+					Vertex& vertex = vertices.at(3 * sourceFaceId + k);
+					vertex.atlasIndex = atlasIndex;
+					vertex.chartIndex = chartIndex;
+					vertex.uv[0] = mesh.texcoord(vi).x;
+					vertex.uv[1] = mesh.texcoord(vi).y;
+					vertex.xref = sourceVi;
 				}
 			}
 		}
