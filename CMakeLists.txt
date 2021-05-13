@@ -7,15 +7,10 @@ endif()
 
 project(xatlas)
 
-if (WIN32)
-    # clang on windows uses visual studio standard library, which uses c++14 features
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
-else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0)
-        # avoid the "‘nodiscard’ attribute directive ignored" warning
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
-    endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
+if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0)
+    # avoid the "‘nodiscard’ attribute directive ignored" warning
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
 endif()
 
 set(xatlas_SOURCES xatlas.h xatlas.cpp)
