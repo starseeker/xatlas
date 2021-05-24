@@ -32,6 +32,7 @@ Copyright NVIDIA Corporation 2006 -- Ignacio Castano <icastano@nvidia.com>
 #ifndef XATLAS_H
 #define XATLAS_H
 #include <stdint.h>
+#include <vector>
 
 namespace xatlas {
 
@@ -262,6 +263,17 @@ void SetPrint(PrintFunc print, bool verbose);
 // Helper functions for error messages.
 const char *StringForEnum(AddMeshError error);
 const char *StringForEnum(ProgressCategory category);
+
+/**
+ * @brief Call after ComputeCharts to extract chart info from the xatlas
+ * @param atlas pointer to the xatlas (after ComputeCharts was called)
+ * @param vertices output vector will be filled with chart parametrization
+ *                 (after filling it should have 3 * nMeshFaces vertices)
+ * @param meshId id of the mesh for which the chart parametrization
+ * 				 should be extracted
+ */
+void ExtractCharts(const Atlas* atlas, std::vector<Vertex>& vertices,
+				   uint32_t meshId = 0);
 
 } // namespace xatlas
 

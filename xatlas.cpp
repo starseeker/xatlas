@@ -4293,8 +4293,8 @@ static NLMatrix nlCRSMatrixNewFromSparseMatrix(NLSparseMatrix* M)
 		CRS->sliceptr[0] = 0;
 		for (slice = 1; slice < nslices; ++slice) {
 			while (cur_NNZ < cur_bound && cur_row < M->m) {
-				++cur_row;
 				cur_NNZ += CRS->rowptr[cur_row + 1] - CRS->rowptr[cur_row];
+				++cur_row;
 			}
 			CRS->sliceptr[slice] = cur_row;
 			cur_bound += slice_size;
@@ -9931,6 +9931,79 @@ const char *StringForEnum(ProgressCategory category)
 	if (category == ProgressCategory::BuildOutputMeshes)
 		return "Building output meshes";
 	return "";
+}
+
+/**
+ * @brief Call after ComputeCharts to extract chart info from the xatlas
+ * @param atlas pointer to the xatlas (after ComputeCharts was called)
+ * @param vertices output vector will be filled with chart parametrization
+ *                 (after filling it should have 3 * nMeshFaces vertices)
+ * @param meshId id of the mesh for which the chart parametrization
+ * 				 should be extracted
+ */
+void ExtractCharts(const Atlas* atlas, std::vector<Vertex>& vertices,
+				   uint32_t meshId)
+{
+	// Validate arguments and context state.
+	if (!atlas) {
+		XA_PRINT_WARNING("ExtractCharts: atlas is null.\n");
+		return;
+	}
+
+	const Context *ctx = (const Context *)atlas;
+	if (ctx->meshes.isEmpty()) {
+		XA_PRINT_WARNING("ExtractCharts: No meshes. Call AddMesh first.\n");
+		return;
+	}
+	if (meshId >= ctx->meshes.size()) {
+		XA_PRINT_WARNING("ExtractCharts: Mesh with specified meshId not found.\n");
+		return;
+	}
+	if (!ctx->paramAtlas.chartsComputed()) {
+		XA_PRINT_WARNING("ExtractCharts: ComputeCharts must be called first.\n");
+		return;
+	}
+
+	Vertex invalidData { -1, -1, {0, 0}, 0 };
+	vertices.resize(ctx->paramAtlas.mesh(meshId)->indexCount(), invalidData);
+
+	for (uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid)
+	{
+		const internal::param::ChartGroup& chartGroup = *ctx->paramAtlas.chartGroupAt(meshId, gid);
+		for (uint32_t id = 0; id < chartGroup.chartCount(); ++id)
+		{
+			const internal::param::Chart& chart = *chartGroup.chartAt(id);
+			const internal::Mesh& mesh = *chart.unifiedMesh();
+
+			// atlasId is not used, store local chart id (in this group)
+			int32_t atlasIndex = chart.isInvalid() ? -1
+												   : static_cast<int32_t>(id);
+			// use chart group id as chartIndex
+			int32_t chartIndex = chart.isInvalid() ? -1
+												   : static_cast<int32_t>(gid);
+
+			XA_ASSERT(chart.isInvalid() == false);
+
+			for (uint32_t fi = 0; fi < mesh.faceCount(); ++fi)
+			{
+				uint32_t sourceFaceId = chart.mapFaceToSourceFace(fi);
+
+				for (int k = 0; k < 3; ++k)
+				{
+					uint32_t vi = mesh.vertexAt(3 * fi + k);
+					uint32_t sourceVi = chart.mapChartVertexToSourceVertex(vi);
+
+					// safe access with bound checking
+					Vertex& vertex = vertices.at(3 * sourceFaceId + k);
+					vertex.atlasIndex = atlasIndex;
+					vertex.chartIndex = chartIndex;
+					vertex.uv[0] = mesh.texcoord(vi).x;
+					vertex.uv[1] = mesh.texcoord(vi).y;
+					vertex.xref = sourceVi;
+				}
+			}
+		}
+	}
 }
 
 } // namespace xatlas
