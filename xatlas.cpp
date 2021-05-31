@@ -6426,15 +6426,23 @@ static void triangle_angles(const Vector3 &v1, const Vector3 &v2, const Vector3 
 static bool setup_abf_relations(opennl::NLContext *context, int id0, int id1, int id2, const Vector3 &p0, const Vector3 &p1, const Vector3 &p2)
 {
 	// @@ IC: Wouldn't it be more accurate to return cos and compute 1-cos^2?
-	// It does indeed seem to be a little bit more robust.
-	// @@ Need to revisit this more carefully!
+    // @@ MH: sin(acos(v)) is more accurate when v in [-0.25, 0.25] ~ 75-115 deg
+	// @@ outside of this interval sqrt(1 - v^2) is more accurate,
+	// @@ however it can't compensate for the loss of accuracy due to floats :/
+	const float kSineEpsilon = 1e-6;
 	float a0, a1, a2;
 	triangle_angles(p0, p1, p2, &a0, &a1, &a2);
-	if (a0 == 0.0f || a1 == 0.0f || a2 == 0.0f)
-		return false;
 	float s0 = sinf(a0);
 	float s1 = sinf(a1);
 	float s2 = sinf(a2);
+	// fallback to a default conformal map relations algorithm which is numerically
+	// more stable around 0
+	if (isZero(s0, kSineEpsilon) || isZero(s1, kSineEpsilon)
+	    || isZero(s2, kSineEpsilon))
+	{
+		return false;
+	}
+
 	if (s1 > s0 && s1 > s2) {
 		swap(s1, s2);
 		swap(s0, s1);
@@ -6451,7 +6459,7 @@ static bool setup_abf_relations(opennl::NLContext *context, int id0, int id1, in
 		swap(id0, id1);
 	}
 	float c0 = cosf(a0);
-	float ratio = (s2 == 0.0f) ? 1.0f : s1 / s2;
+	float ratio = s1 / s2;
 	float cosine = c0 * ratio;
 	float sine = s0 * ratio;
 	// Note  : 2*id + 0 --> u
