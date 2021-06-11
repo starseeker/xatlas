@@ -229,6 +229,9 @@ struct PackOptions
 
 	// Rotate charts to improve packing.
 	bool rotateCharts = true;
+
+	// number of attempts to place a chart using the probabilistic approach (bruteForce set to false)
+	int attempts = 4096;
 };
 
 // Call after ComputeCharts. Can be called multiple times to re-pack charts with different options.
