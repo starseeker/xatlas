@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.1)
 
 project(XATLAS)
 
-add_definitions(-g)
-
 set(CMAKE_CXX_STANDARD 14)
 
 set(xatlas_SOURCES xatlas.h xatlas_c.h xatlas.cpp)
