@@ -35,7 +35,7 @@ SOFTWARE.
 #include <OpenImageDenoise/oidn.h>
 #include <TaskScheduler_c.h>
 #include "shaders/shared.h"
-#include "../xatlas.h"
+#include <xatlas.h>
 #include "viewer.h"
 
 static bx::Vec3 operator+(bx::Vec3 a, bx::Vec3 b) { return bx::add(a, b); }
@@ -293,8 +293,6 @@ struct BakeOptions
 	bx::Vec3 skyColor = bx::Vec3(1.0f);
 	int maxDepth = 8;
 };
-
-static const int kMaxDepth = 16;
 
 struct SampleLocation
 {
@@ -1070,7 +1068,6 @@ void bakeClear()
 
 void bakeShowGuiOptions()
 {
-	const ImVec2 buttonSize(ImVec2(ImGui::GetContentRegionAvailWidth() * 0.3f, 0.0f));
 	const ImVec4 red(1.0f, 0.0f, 0.0f, 1.0f);
 	ImGui::Text(ICON_FA_LIGHTBULB_O " Lightmap");
 	ImGui::Spacing();
@@ -1085,6 +1082,7 @@ void bakeShowGuiOptions()
 	ImGui::Text("Baking not supported in 32-bit build");
 	ImGui::PopStyleColor();
 #else
+	const ImVec2 buttonSize(ImVec2(ImGui::GetContentRegionAvailWidth() * 0.3f, 0.0f));
 	if ((s_bake.status == BakeStatus::Idle || s_bake.status == BakeStatus::Finished || s_bake.status == BakeStatus::Cancelled || s_bake.status == BakeStatus::Error) && (s_bake.denoiseStatus == DenoiseStatus::Idle || s_bake.denoiseStatus == DenoiseStatus::Finished || s_bake.denoiseStatus == DenoiseStatus::Error)) {
 		if (ImGui::Button(ICON_FA_BOLT " Bake", buttonSize))
 			bakeExecute();
@@ -1095,7 +1093,7 @@ void bakeShowGuiOptions()
 		}
 		ImGui::Columns(2, nullptr, false);
 		guiColumnColorEdit("Sky color", "##skyColor", &s_bake.options.skyColor.x);
-		guiColumnSliderInt("Max depth", "##maxDepth", &s_bake.options.maxDepth, 1, kMaxDepth);
+		guiColumnSliderInt("Max depth", "##maxDepth", &s_bake.options.maxDepth, 1, 16);
 		ImGui::Columns(1);
 		std::lock_guard<std::mutex> lock(s_bake.errorMessageMutex);
 		if (s_bake.errorMessage[0]) {

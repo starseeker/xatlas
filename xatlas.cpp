@@ -33,6 +33,13 @@ https://github.com/brandonpelfrey/Fast-BVH
 MIT License
 Copyright (c) 2012 Brandon Pelfrey
 */
+#include "xatlas.h"
+#ifndef XATLAS_C_API
+#define XATLAS_C_API 0
+#endif
+#if XATLAS_C_API
+#include "xatlas_c.h"
+#endif
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -45,7 +52,6 @@ Copyright (c) 2012 Brandon Pelfrey
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "xatlas.h"
 
 #ifndef XA_DEBUG
 #ifdef NDEBUG
@@ -113,7 +119,7 @@ Copyright (c) 2012 Brandon Pelfrey
 
 #define XA_UNUSED(a) ((void)(a))
 
-#define XA_MERGE_CHARTS 0
+#define XA_MERGE_CHARTS 1
 #define XA_MERGE_CHARTS_MIN_NORMAL_DEVIATION 0.5f
 #define XA_RECOMPUTE_CHARTS 1
 #define XA_CHECK_PARAM_WINDING 0
@@ -990,7 +996,7 @@ struct ArrayBase
 	// Insert the given element at the given index shifting all the elements up.
 	void insertAt(uint32_t index, const uint8_t *value)
 	{
-		XA_DEBUG_ASSERT(index <= size);
+		XA_DEBUG_ASSERT(index >= 0 && index <= size);
 		XA_DEBUG_ASSERT(value);
 		resize(size + 1, false);
 		XA_DEBUG_ASSERT(buffer);
@@ -1046,7 +1052,7 @@ struct ArrayBase
 	// Remove the element at the given index. This is an expensive operation!
 	void removeAt(uint32_t index)
 	{
-		XA_DEBUG_ASSERT(index < size);
+		XA_DEBUG_ASSERT(index >= 0 && index < size);
 		XA_DEBUG_ASSERT(buffer);
 		if (buffer) {
 			if (size > 1)
@@ -1059,7 +1065,7 @@ struct ArrayBase
 	// Element at index is swapped with the last element, then the array length is decremented.
 	void removeAtFast(uint32_t index)
 	{
-		XA_DEBUG_ASSERT(index < size);
+		XA_DEBUG_ASSERT(index >= 0 && index < size);
 		XA_DEBUG_ASSERT(buffer);
 		if (buffer) {
 			if (size > 1 && index != size - 1)
@@ -2240,6 +2246,7 @@ public:
 	// If vertices is null or vertexCount is 0, the boundary vertices are used.
 	void compute(const Vector2 *vertices = nullptr, uint32_t vertexCount = 0)
 	{
+		XA_DEBUG_ASSERT(!m_boundaryVertices.isEmpty());
 		if (!vertices || vertexCount == 0) {
 			vertices = m_boundaryVertices.data();
 			vertexCount = m_boundaryVertices.size();
@@ -4189,8 +4196,8 @@ static void nlSparseMatrixDestroy(NLSparseMatrix* M)
 
 static void nlSparseMatrixAdd(NLSparseMatrix* M, uint32_t i, uint32_t j, double value)
 {
-	XA_DEBUG_ASSERT(i <= M->m - 1);
-	XA_DEBUG_ASSERT(j <= M->n - 1);
+	XA_DEBUG_ASSERT(i >= 0 && i <= M->m - 1);
+	XA_DEBUG_ASSERT(j >= 0 && j <= M->n - 1);
 	if (i == j)
 		M->diag[i] += value;
 	nlRowColumnAdd(&(M->row[i]), j, value);
@@ -4517,19 +4524,19 @@ static void nlSolverParameteri(NLContext *context, uint32_t pname, int param)
 
 static void nlSetVariable(NLContext *context, uint32_t index, double value)
 {
-	XA_DEBUG_ASSERT(index <= context->nb_variables - 1);
+	XA_DEBUG_ASSERT(index >= 0 && index <= context->nb_variables - 1);
 	NL_BUFFER_ITEM(context->variable_buffer[0], index) = value;
 }
 
 static double nlGetVariable(NLContext *context, uint32_t index)
 {
-	XA_DEBUG_ASSERT(index <= context->nb_variables - 1);
+	XA_DEBUG_ASSERT(index >= 0 && index <= context->nb_variables - 1);
 	return NL_BUFFER_ITEM(context->variable_buffer[0], index);
 }
 
 static void nlLockVariable(NLContext *context, uint32_t index)
 {
-	XA_DEBUG_ASSERT(index <= context->nb_variables - 1);
+	XA_DEBUG_ASSERT(index >= 0 && index <= context->nb_variables - 1);
 	context->variable_is_locked[index] = true;
 }
 
@@ -4567,7 +4574,7 @@ static void nlVectorToVariables(NLContext *context)
 
 static void nlCoefficient(NLContext *context, uint32_t index, double value)
 {
-	XA_DEBUG_ASSERT(index <= context->nb_variables - 1);
+	XA_DEBUG_ASSERT(index >= 0 && index <= context->nb_variables - 1);
 	if (context->variable_is_locked[index]) {
 		/*
 		 * Note: in al, indices are NLvariable indices,
@@ -6426,23 +6433,15 @@ static void triangle_angles(const Vector3 &v1, const Vector3 &v2, const Vector3 
 static bool setup_abf_relations(opennl::NLContext *context, int id0, int id1, int id2, const Vector3 &p0, const Vector3 &p1, const Vector3 &p2)
 {
 	// @@ IC: Wouldn't it be more accurate to return cos and compute 1-cos^2?
-    // @@ MH: sin(acos(v)) is more accurate when v in [-0.25, 0.25] ~ 75-115 deg
-	// @@ outside of this interval sqrt(1 - v^2) is more accurate,
-	// @@ however it can't compensate for the loss of accuracy due to floats :/
-	const float kSineEpsilon = 1e-6;
+	// It does indeed seem to be a little bit more robust.
+	// @@ Need to revisit this more carefully!
 	float a0, a1, a2;
 	triangle_angles(p0, p1, p2, &a0, &a1, &a2);
+	if (a0 == 0.0f || a1 == 0.0f || a2 == 0.0f)
+		return false;
 	float s0 = sinf(a0);
 	float s1 = sinf(a1);
 	float s2 = sinf(a2);
-	// fallback to a default conformal map relations algorithm which is numerically
-	// more stable around 0
-	if (isZero(s0, kSineEpsilon) || isZero(s1, kSineEpsilon)
-	    || isZero(s2, kSineEpsilon))
-	{
-		return false;
-	}
-
 	if (s1 > s0 && s1 > s2) {
 		swap(s1, s2);
 		swap(s0, s1);
@@ -6459,7 +6458,7 @@ static bool setup_abf_relations(opennl::NLContext *context, int id0, int id1, in
 		swap(id0, id1);
 	}
 	float c0 = cosf(a0);
-	float ratio = s1 / s2;
+	float ratio = (s2 == 0.0f) ? 1.0f : s1 / s2;
 	float cosine = c0 * ratio;
 	float sine = s0 * ratio;
 	// Note  : 2*id + 0 --> u
@@ -7889,7 +7888,6 @@ public:
 		m_invalidMeshGeometry.runDtors();
 	}
 
-    const Mesh* mesh(int i) const { return m_meshes[i]; }
 	uint32_t meshCount() const { return m_meshes.size(); }
 	const InvalidMeshGeometry &invalidMeshGeometry(uint32_t meshIndex) const { return m_invalidMeshGeometry[meshIndex]; }
 	bool chartsComputed() const { return m_chartsComputed; }
@@ -8108,7 +8106,6 @@ struct AddChartTaskArgs
 {
 	param::Chart *paramChart;
 	Chart *chart; // out
-    const Mesh* originalMesh = nullptr;
 };
 
 static void runAddChartTask(void *groupUserData, void *taskUserData)
@@ -8123,9 +8120,7 @@ static void runAddChartTask(void *groupUserData, void *taskUserData)
 	Mesh *mesh = paramChart->unifiedMesh();
 	Chart *chart = args->chart = XA_NEW(MemTag::Default, Chart);
 	chart->atlasIndex = -1;
-
-    XA_ASSERT(args->originalMesh != nullptr);
-	chart->material = args->originalMesh->faceMaterial(paramChart->mapFaceToSourceFace(0));
+	chart->material = 0;
 	chart->indexCount = mesh->indexCount();
 	chart->indices = mesh->indices().data;
 	chart->parametricArea = mesh->computeParametricArea();
@@ -8174,6 +8169,7 @@ struct Atlas
 	uint32_t getWidth() const { return m_width; }
 	uint32_t getHeight() const { return m_height; }
 	uint32_t getNumAtlases() const { return m_bitImages.size(); }
+	float getTexelsPerUnit() const { return m_texelsPerUnit; }
 	const Chart *getChart(uint32_t index) const { return m_charts[index]; }
 	uint32_t getChartCount() const { return m_charts.size(); }
 	const Array<AtlasImage *> &getImages() const { return m_atlasImages; }
@@ -8206,7 +8202,6 @@ struct Atlas
 				for (uint32_t k = 0; k < count; k++) {
 					AddChartTaskArgs &args = taskArgs[chartIndex];
 					args.paramChart = chartGroup->chartAt(k);
-                    args.originalMesh = paramAtlas->mesh(i);
 					Task task;
 					task.userData = &taskArgs[chartIndex];
 					task.func = runAddChartTask;
@@ -8329,7 +8324,7 @@ struct Atlas
 			// Compute chart scale
 			float scale = 1.0f;
 			if (chart->parametricArea != 0.0f) {
-                scale = sqrtf(chart->surfaceArea / chart->parametricArea) * texelsPerUnit[chart->material];
+				scale = sqrtf(chart->surfaceArea / chart->parametricArea) * texelsPerUnit[chart->material];
 				XA_ASSERT(isFinite(scale));
 			}
 			// Translate, rotate and scale vertices. Compute extents.
@@ -8665,7 +8660,7 @@ struct Atlas
 private:
 	bool findChartLocation(const PackOptions &options, const Vector2i &startPosition, const BitImage *atlasBitImage, const BitImage *chartBitImage, const BitImage *chartBitImageRotated, int w, int h, int *best_x, int *best_y, int *best_w, int *best_h, int *best_r, uint32_t maxResolution)
 	{
-		const int attempts = options.attempts;
+		const int attempts = 4096;
 		if (options.bruteForce || attempts >= w * h)
 			return findChartLocation_bruteForce(options, startPosition, atlasBitImage, chartBitImage, chartBitImageRotated, w, h, best_x, best_y, best_w, best_h, best_r, maxResolution);
 		return findChartLocation_random(options, atlasBitImage, chartBitImage, chartBitImageRotated, w, h, best_x, best_y, best_w, best_h, best_r, attempts, maxResolution);
@@ -8874,6 +8869,7 @@ private:
 	RadixSort m_radix;
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
+	float m_texelsPerUnit = 0.0f;
 	KISSRng m_rand;
 };
 
@@ -9973,7 +9969,18 @@ void ExtractCharts(const Atlas* atlas, std::vector<Vertex>& vertices,
 	}
 
 	Vertex invalidData { -1, -1, {0, 0}, 0 };
-	vertices.resize(ctx->paramAtlas.mesh(meshId)->indexCount(), invalidData);
+	size_t vcnt = 0;
+	for (uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid) {
+		const internal::param::ChartGroup& chartGroup = *ctx->paramAtlas.chartGroupAt(meshId, gid);
+		for (uint32_t id = 0; id < chartGroup.chartCount(); ++id) {
+			const internal::param::Chart& chart = *chartGroup.chartAt(id);
+			const internal::Mesh& mesh = *chart.unifiedMesh();
+			for (uint32_t fi = 0; fi < mesh.faceCount(); ++fi) {
+				vcnt = vcnt + 3;
+			}
+		}
+	}
+	vertices.resize(vcnt, invalidData);
 
 	for (uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid)
 	{
@@ -10015,3 +10022,113 @@ void ExtractCharts(const Atlas* atlas, std::vector<Vertex>& vertices,
 }
 
 } // namespace xatlas
+
+#if XATLAS_C_API
+static_assert(sizeof(xatlas::Chart) == sizeof(xatlasChart), "xatlasChart size mismatch");
+static_assert(sizeof(xatlas::Vertex) == sizeof(xatlasVertex), "xatlasVertex size mismatch");
+static_assert(sizeof(xatlas::Mesh) == sizeof(xatlasMesh), "xatlasMesh size mismatch");
+static_assert(sizeof(xatlas::Atlas) == sizeof(xatlasAtlas), "xatlasAtlas size mismatch");
+static_assert(sizeof(xatlas::MeshDecl) == sizeof(xatlasMeshDecl), "xatlasMeshDecl size mismatch");
+static_assert(sizeof(xatlas::UvMeshDecl) == sizeof(xatlasUvMeshDecl), "xatlasUvMeshDecl size mismatch");
+static_assert(sizeof(xatlas::ChartOptions) == sizeof(xatlasChartOptions), "xatlasChartOptions size mismatch");
+static_assert(sizeof(xatlas::PackOptions) == sizeof(xatlasPackOptions), "xatlasPackOptions size mismatch");
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+xatlasAtlas *xatlasCreate()
+{
+	return (xatlasAtlas *)xatlas::Create();
+}
+
+void xatlasDestroy(xatlasAtlas *atlas)
+{
+	xatlas::Destroy((xatlas::Atlas *)atlas);
+}
+
+xatlasAddMeshError xatlasAddMesh(xatlasAtlas *atlas, const xatlasMeshDecl *meshDecl, uint32_t meshCountHint)
+{
+	return (xatlasAddMeshError)xatlas::AddMesh((xatlas::Atlas *)atlas, *(const xatlas::MeshDecl *)meshDecl, meshCountHint);
+}
+
+void xatlasAddMeshJoin(xatlasAtlas *atlas)
+{
+	xatlas::AddMeshJoin((xatlas::Atlas *)atlas);
+}
+
+xatlasAddMeshError xatlasAddUvMesh(xatlasAtlas *atlas, const xatlasUvMeshDecl *decl)
+{
+	return (xatlasAddMeshError)xatlas::AddUvMesh((xatlas::Atlas *)atlas, *(const xatlas::UvMeshDecl *)decl);
+}
+
+void xatlasComputeCharts(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions)
+{
+	xatlas::ComputeCharts((xatlas::Atlas *)atlas, chartOptions ? *(xatlas::ChartOptions *)chartOptions : xatlas::ChartOptions());
+}
+
+void xatlasPackCharts(xatlasAtlas *atlas, const xatlasPackOptions *packOptions)
+{
+	xatlas::PackCharts((xatlas::Atlas *)atlas, packOptions ? *(xatlas::PackOptions *)packOptions : xatlas::PackOptions());
+}
+
+void xatlasGenerate(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions, const xatlasPackOptions *packOptions)
+{
+	xatlas::Generate((xatlas::Atlas *)atlas, chartOptions ? *(xatlas::ChartOptions *)chartOptions : xatlas::ChartOptions(), packOptions ? *(xatlas::PackOptions *)packOptions : xatlas::PackOptions());
+}
+
+void xatlasSetProgressCallback(xatlasAtlas *atlas, xatlasProgressFunc progressFunc, void *progressUserData)
+{
+	xatlas::ProgressFunc pf;
+	*(void **)&pf = (void *)progressFunc;
+	xatlas::SetProgressCallback((xatlas::Atlas *)atlas, pf, progressUserData);
+}
+
+void xatlasSetAlloc(xatlasReallocFunc reallocFunc, xatlasFreeFunc freeFunc)
+{
+	xatlas::SetAlloc((xatlas::ReallocFunc)reallocFunc, (xatlas::FreeFunc)freeFunc);
+}
+
+void xatlasSetPrint(xatlasPrintFunc print, bool verbose)
+{
+	xatlas::SetPrint((xatlas::PrintFunc)print, verbose);
+}
+
+const char *xatlasAddMeshErrorString(xatlasAddMeshError error)
+{
+	return xatlas::StringForEnum((xatlas::AddMeshError)error);
+}
+
+const char *xatlasProgressCategoryString(xatlasProgressCategory category)
+{
+	return xatlas::StringForEnum((xatlas::ProgressCategory)category);
+}
+
+void xatlasMeshDeclInit(xatlasMeshDecl *meshDecl)
+{
+	xatlas::MeshDecl init;
+	memcpy(meshDecl, &init, sizeof(init));
+}
+
+void xatlasUvMeshDeclInit(xatlasUvMeshDecl *uvMeshDecl)
+{
+	xatlas::UvMeshDecl init;
+	memcpy(uvMeshDecl, &init, sizeof(init));
+}
+
+void xatlasChartOptionsInit(xatlasChartOptions *chartOptions)
+{
+	xatlas::ChartOptions init;
+	memcpy(chartOptions, &init, sizeof(init));
+}
+
+void xatlasPackOptionsInit(xatlasPackOptions *packOptions)
+{
+	xatlas::PackOptions init;
+	memcpy(packOptions, &init, sizeof(init));
+}
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+#endif // XATLAS_C_API
