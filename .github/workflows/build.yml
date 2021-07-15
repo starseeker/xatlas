@@ -6,40 +6,29 @@ jobs:
   Linux:
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        compiler: [gcc, clang]
+      fail-fast: true
     steps:
     - uses: actions/checkout@v2
-    - name: Install packages
+    - name: Setup - cmake
+      uses: lukka/get-cmake@latest
+    - name: Configure
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install libgl1-mesa-dev libgtk-3-dev xorg-dev
-    - name: Install premake
-      run: |
-         wget https://github.com/premake/premake-core/releases/download/v5.0.0-alpha13/premake-5.0.0-alpha13-linux.tar.gz -O premake.tar.gz
-         tar -xf premake.tar.gz
-    - name: Run premake
-      run: |
-        ./premake5 --cc=${{matrix.compiler}} gmake
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     - name: Build
       run: |
-        cd build/gmake_${{matrix.compiler}}
-        make
+        cmake --build build --config Release
 
   Windows:
     runs-on: windows-latest
     strategy:
-      matrix:
-        platform: [Win32, x64]
+      fail-fast: true
     steps:
     - uses: actions/checkout@v2
-    - name: Run premake
-      shell: powershell
+    - name: Setup - cmake
+      uses: lukka/get-cmake@latest
+    - name: Configure
       run: |
-        .\bin\premake5.exe vs2019
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v1
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     - name: Build
-      shell: cmd
       run: |
-        msbuild build\vs2019\xatlas.sln /p:Configuration=Release /p:Platform="${{matrix.platform}}" /verbosity:minimal
+        cmake --build build --config Release
