@@ -39,7 +39,7 @@ Output:
 #include <string.h>
 #include <time.h>
 #include <xatlas_c.h>
-#include "objzero/objzero.h"
+#include "objzero.h"
 
 #ifdef _MSC_VER
 #define STRICMP _stricmp
