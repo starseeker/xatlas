@@ -1,1 +1,15 @@
 build
+
+# Temporary files
+*~
+\#*\#
+.\#*
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-v][a-z]
+[._]sw[a-p]
+
+# OS specific files
+.DS_Store
+.DS_Store?
+
