@@ -30,6 +30,7 @@ SOFTWARE.
 #include <stdarg.h>
 #include <string.h>
 #include <time.h>
+#include <iostream>
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -237,7 +238,7 @@ int main(int argc, char **argv)
 			ASSERT(result.chartCount == 2);
 		}
 		if (generateAtlas(MODEL_PATH "gazebo.obj", false, &result)) {
-			ASSERT(result.chartCount == 333);
+			ASSERT(result.chartCount == 332);
 		}
 		if (generateAtlas(MODEL_PATH "zero_area_face.obj", false, &result)) {
 			ASSERT(result.chartCount == 0);
