@@ -33,7 +33,6 @@ Copyright NVIDIA Corporation 2006 -- Ignacio Castano <icastano@nvidia.com>
 #define XATLAS_H
 #include <stddef.h>
 #include <stdint.h>
-#include <vector>
 
 namespace xatlas {
 
@@ -92,6 +91,7 @@ struct Atlas
 	uint32_t atlasCount; // Number of sub-atlases. Equal to 0 unless PackOptions resolution is changed from default (0).
 	uint32_t chartCount; // Total number of charts in all meshes.
 	uint32_t meshCount; // Number of output meshes. Equal to the number of times AddMesh was called.
+	float texelsPerUnit; // Equal to PackOptions texelsPerUnit if texelsPerUnit > 0, otherwise an estimated value to match PackOptions resolution.
 };
 
 // Create an empty atlas.
@@ -172,7 +172,7 @@ typedef void (*ParameterizeFunc)(const float *positions, float *texcoords, uint3
 
 struct ChartOptions
 {
-	bool useInputMeshUvs = false; // Use MeshDecl::vertexUvData for charts.
+	ParameterizeFunc paramFunc = nullptr;
 
 	float maxChartArea = 0.0f; // Don't grow charts to be larger than this. 0 means no limit.
 	float maxBoundaryLength = 0.0f; // Don't grow charts to have a longer boundary than this. 0 means no limit.
@@ -187,7 +187,7 @@ struct ChartOptions
 	float maxCost = 2.0f; // If total of all metrics * weights > maxCost, don't grow chart. Lower values result in more charts.
 	uint32_t maxIterations = 1; // Number of iterations of the chart growing and seeding phases. Higher values result in better charts.
 
-	ParameterizeFunc paramFunc = nullptr;
+	bool useInputMeshUvs = false; // Use MeshDecl::vertexUvData for charts.
 	bool fixWinding = false; // Enforce consistent texture coordinate winding.
 };
 
@@ -202,11 +202,10 @@ struct PackOptions
 	// Number of pixels to pad charts with.
 	uint32_t padding = 0;
 
-    // Texels per unit for each material. Must have the size corresponding to the number of materials.
 	// Unit to texel scale. e.g. a 1x1 quad with texelsPerUnit of 32 will take up approximately 32x32 texels in the atlas.
 	// If 0, an estimated value will be calculated to approximately match the given resolution.
 	// If resolution is also 0, the estimated value will approximately match a 1024x1024 atlas.
-    float* texelsPerUnit = nullptr;
+	float texelsPerUnit = 0.0f;
 
 	// If 0, generate a single atlas with texelsPerUnit determining the final resolution.
 	// If not 0, and texelsPerUnit is not 0, generate one or more atlases with that exact resolution.
@@ -230,9 +229,6 @@ struct PackOptions
 
 	// Rotate charts to improve packing.
 	bool rotateCharts = true;
-
-	// number of attempts to place a chart using the probabilistic approach (bruteForce set to false)
-	int attempts = 4096;
 };
 
 // Call after ComputeCharts. Can be called multiple times to re-pack charts with different options.
@@ -267,17 +263,6 @@ void SetPrint(PrintFunc print, bool verbose);
 // Helper functions for error messages.
 const char *StringForEnum(AddMeshError error);
 const char *StringForEnum(ProgressCategory category);
-
-/**
- * @brief Call after ComputeCharts to extract chart info from the xatlas
- * @param atlas pointer to the xatlas (after ComputeCharts was called)
- * @param vertices output vector will be filled with chart parametrization
- *                 (after filling it should have 3 * nMeshFaces vertices)
- * @param meshId id of the mesh for which the chart parametrization
- * 				 should be extracted
- */
-void ExtractCharts(const Atlas* atlas, std::vector<Vertex>& vertices,
-				   uint32_t meshId = 0);
 
 } // namespace xatlas
 

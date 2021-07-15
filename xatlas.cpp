@@ -1247,6 +1247,7 @@ struct ConstArrayView
 {
 	ConstArrayView() : data(nullptr), length(0) {}
 	ConstArrayView(const Array<T> &a) : data(a.data()), length(a.size()) {}
+	ConstArrayView(ArrayView<T> av) : data(av.data), length(av.length) {}
 	ConstArrayView(const T *_data, uint32_t _length) : data(_data), length(_length) {}
 	ConstArrayView &operator=(const Array<T> &a) { data = a.data(); length = a.size(); return *this; }
 	XA_INLINE const T &operator[](uint32_t index) const { XA_DEBUG_ASSERT(index < length); return data[index]; }
@@ -1600,14 +1601,14 @@ private:
 
 struct Fit
 {
-	static bool computeBasis(const Vector3 *points, uint32_t pointsCount, Basis *basis)
+	static bool computeBasis(ConstArrayView<Vector3> points, Basis *basis)
 	{
-		if (computeLeastSquaresNormal(points, pointsCount, &basis->normal)) {
+		if (computeLeastSquaresNormal(points, &basis->normal)) {
 			basis->tangent = Basis::computeTangent(basis->normal);
 			basis->bitangent = Basis::computeBitangent(basis->normal, basis->tangent);
 			return true;
 		}
-		return computeEigen(points, pointsCount, basis);
+		return computeEigen(points, basis);
 	}
 
 private:
@@ -1615,21 +1616,21 @@ private:
 	// Fast, and accurate to within a few degrees.
 	// Returns None if the points do not span a plane.
 	// https://www.ilikebigbits.com/2015_03_04_plane_from_points.html
-	static bool computeLeastSquaresNormal(const Vector3 *points, uint32_t pointsCount, Vector3 *normal)
+	static bool computeLeastSquaresNormal(ConstArrayView<Vector3> points, Vector3 *normal)
 	{
-		XA_DEBUG_ASSERT(pointsCount >= 3);
-		if (pointsCount == 3) {
+		XA_DEBUG_ASSERT(points.length >= 3);
+		if (points.length == 3) {
 			*normal = normalize(cross(points[2] - points[0], points[1] - points[0]));
 			return true;
 		}
-		const float invN = 1.0f / float(pointsCount);
+		const float invN = 1.0f / float(points.length);
 		Vector3 centroid(0.0f);
-		for (uint32_t i = 0; i < pointsCount; i++)
+		for (uint32_t i = 0; i < points.length; i++)
 			centroid += points[i];
 		centroid *= invN;
 		// Calculate full 3x3 covariance matrix, excluding symmetries:
 		float xx = 0.0f, xy = 0.0f, xz = 0.0f, yy = 0.0f, yz = 0.0f, zz = 0.0f;
-		for (uint32_t i = 0; i < pointsCount; i++) {
+		for (uint32_t i = 0; i < points.length; i++) {
 			Vector3 r = points[i] - centroid;
 			xx += r.x * r.x;
 			xy += r.x * r.y;
@@ -1694,10 +1695,10 @@ private:
 		return isNormalized(*normal);
 	}
 
-	static bool computeEigen(const Vector3 *points, uint32_t pointsCount, Basis *basis)
+	static bool computeEigen(ConstArrayView<Vector3> points, Basis *basis)
 	{
 		float matrix[6];
-		computeCovariance(pointsCount, points, matrix);
+		computeCovariance(points, matrix);
 		if (matrix[0] == 0 && matrix[3] == 0 && matrix[5] == 0)
 			return false;
 		float eigenValues[3];
@@ -1710,25 +1711,24 @@ private:
 		return true;
 	}
 
-	static Vector3 computeCentroid(int n, const Vector3 * points)
+	static Vector3 computeCentroid(ConstArrayView<Vector3> points)
 	{
 		Vector3 centroid(0.0f);
-		for (int i = 0; i < n; i++) {
+		for (uint32_t i = 0; i < points.length; i++)
 			centroid += points[i];
-		}
-		centroid /= float(n);
+		centroid /= float(points.length);
 		return centroid;
 	}
 
-	static Vector3 computeCovariance(int n, const Vector3 * points, float * covariance)
+	static Vector3 computeCovariance(ConstArrayView<Vector3> points, float * covariance)
 	{
 		// compute the centroid
-		Vector3 centroid = computeCentroid(n, points);
+		Vector3 centroid = computeCentroid(points);
 		// compute covariance matrix
 		for (int i = 0; i < 6; i++) {
 			covariance[i] = 0.0f;
 		}
-		for (int i = 0; i < n; i++) {
+		for (uint32_t i = 0; i < points.length; i++) {
 			Vector3 v = points[i] - centroid;
 			covariance[0] += v.x * v.x;
 			covariance[1] += v.x * v.y;
@@ -2074,9 +2074,9 @@ private:
 class RadixSort
 {
 public:
-	void sort(const float *input, uint32_t count)
+	void sort(ConstArrayView<float> input)
 	{
-		if (input == nullptr || count == 0) {
+		if (input.length == 0) {
 			m_buffer1.clear();
 			m_buffer2.clear();
 			m_ranks = m_buffer1.data();
@@ -2084,28 +2084,23 @@ public:
 			return;
 		}
 		// Resize lists if needed
-		m_buffer1.resize(count);
-		m_buffer2.resize(count);
+		m_buffer1.resize(input.length);
+		m_buffer2.resize(input.length);
 		m_ranks = m_buffer1.data();
 		m_ranks2 = m_buffer2.data();
 		m_validRanks = false;
-		if (count < 32)
-			insertionSort(input, count);
+		if (input.length < 32)
+			insertionSort(input);
 		else {
 			// @@ Avoid touching the input multiple times.
-			for (uint32_t i = 0; i < count; i++) {
+			for (uint32_t i = 0; i < input.length; i++) {
 				floatFlip((uint32_t &)input[i]);
 			}
-			radixSort((const uint32_t *)input, count);
-			for (uint32_t i = 0; i < count; i++) {
+			radixSort(ConstArrayView<uint32_t>((const uint32_t *)input.data, input.length));
+			for (uint32_t i = 0; i < input.length; i++) {
 				ifloatFlip((uint32_t &)input[i]);
 			}
 		}
-	}
-
-	void sort(const Array<float> &input)
-	{
-		sort(input.data(), input.size());
 	}
 
 	// Access to results. m_ranks is a list of indices in sorted order, i.e. in the order you may further process your data
@@ -2132,7 +2127,7 @@ private:
 		f ^= mask;
 	}
 
-	void createHistograms(const uint32_t *buffer, uint32_t count, uint32_t *histogram)
+	void createHistograms(ConstArrayView<uint32_t> input, uint32_t *histogram)
 	{
 		const uint32_t bucketCount = sizeof(uint32_t);
 		// Init bucket pointers.
@@ -2144,18 +2139,18 @@ private:
 		memset(histogram, 0, 256 * bucketCount * sizeof(uint32_t));
 		// @@ Add support for signed integers.
 		// Build histograms.
-		const uint8_t *p = (const uint8_t *)buffer;  // @@ Does this break aliasing rules?
-		const uint8_t *pe = p + count * sizeof(uint32_t);
+		const uint8_t *p = (const uint8_t *)input.data;  // @@ Does this break aliasing rules?
+		const uint8_t *pe = p + input.length * sizeof(uint32_t);
 		while (p != pe) {
 			h[0][*p++]++, h[1][*p++]++, h[2][*p++]++, h[3][*p++]++;
 		}
 	}
 
-	void insertionSort(const float *input, uint32_t count)
+	void insertionSort(ConstArrayView<float> input)
 	{
 		if (!m_validRanks) {
 			m_ranks[0] = 0;
-			for (uint32_t i = 1; i != count; ++i) {
+			for (uint32_t i = 1; i != input.length; ++i) {
 				int rank = m_ranks[i] = i;
 				uint32_t j = i;
 				while (j != 0 && input[rank] < input[m_ranks[j - 1]]) {
@@ -2168,7 +2163,7 @@ private:
 			}
 			m_validRanks = true;
 		} else {
-			for (uint32_t i = 1; i != count; ++i) {
+			for (uint32_t i = 1; i != input.length; ++i) {
 				int rank = m_ranks[i];
 				uint32_t j = i;
 				while (j != 0 && input[rank] < input[m_ranks[j - 1]]) {
@@ -2182,20 +2177,20 @@ private:
 		}
 	}
 
-	void radixSort(const uint32_t *input, uint32_t count)
+	void radixSort(ConstArrayView<uint32_t> input)
 	{
 		const uint32_t P = sizeof(uint32_t); // pass count
 		// Allocate histograms & offsets on the stack
 		uint32_t histogram[256 * P];
 		uint32_t *link[256];
-		createHistograms(input, count, histogram);
+		createHistograms(input, histogram);
 		// Radix sort, j is the pass number (0=LSB, P=MSB)
 		for (uint32_t j = 0; j < P; j++) {
 			// Pointer to this bucket.
 			const uint32_t *h = &histogram[j * 256];
-			auto inputBytes = (const uint8_t *)input; // @@ Is this aliasing legal?
+			auto inputBytes = (const uint8_t *)input.data; // @@ Is this aliasing legal?
 			inputBytes += j;
-			if (h[inputBytes[0]] == count) {
+			if (h[inputBytes[0]] == input.length) {
 				// Skip this pass, all values are the same.
 				continue;
 			}
@@ -2204,12 +2199,12 @@ private:
 			for (uint32_t i = 1; i < 256; i++) link[i] = link[i - 1] + h[i - 1];
 			// Perform Radix Sort
 			if (!m_validRanks) {
-				for (uint32_t i = 0; i < count; i++) {
+				for (uint32_t i = 0; i < input.length; i++) {
 					*link[inputBytes[i * P]]++ = i;
 				}
 				m_validRanks = true;
 			} else {
-				for (uint32_t i = 0; i < count; i++) {
+				for (uint32_t i = 0; i < input.length; i++) {
 					const uint32_t idx = m_ranks[i];
 					*link[inputBytes[idx * P]]++ = idx;
 				}
@@ -2219,7 +2214,7 @@ private:
 		}
 		// All values were equal, generate linear ranks.
 		if (!m_validRanks) {
-			for (uint32_t i = 0; i < count; i++)
+			for (uint32_t i = 0; i < input.length; i++)
 				m_ranks[i] = i;
 			m_validRanks = true;
 		}
@@ -2243,15 +2238,13 @@ public:
 	}
 
 	// This should compute convex hull and use rotating calipers to find the best box. Currently it uses a brute force method.
-	// If vertices is null or vertexCount is 0, the boundary vertices are used.
-	void compute(const Vector2 *vertices = nullptr, uint32_t vertexCount = 0)
+	// If vertices are empty, the boundary vertices are used.
+	void compute(ConstArrayView<Vector2> vertices = ConstArrayView<Vector2>())
 	{
 		XA_DEBUG_ASSERT(!m_boundaryVertices.isEmpty());
-		if (!vertices || vertexCount == 0) {
-			vertices = m_boundaryVertices.data();
-			vertexCount = m_boundaryVertices.size();
-		}
-		convexHull(m_boundaryVertices.data(), m_boundaryVertices.size(), m_hull, 0.00001f);
+		if (vertices.length == 0)
+			vertices = m_boundaryVertices;
+		convexHull(m_boundaryVertices, m_hull, 0.00001f);
 		// @@ Ideally I should use rotating calipers to find the best box. Using brute force for now.
 		float best_area = FLT_MAX;
 		Vector2 best_min(0);
@@ -2267,7 +2260,7 @@ public:
 			Vector2 box_min(FLT_MAX, FLT_MAX);
 			Vector2 box_max(-FLT_MAX, -FLT_MAX);
 			// Consider all points, not only boundary points, in case the input chart is malformed.
-			for (uint32_t v = 0; v < vertexCount; v++) {
+			for (uint32_t v = 0; v < vertices.length; v++) {
 				const Vector2 &point = vertices[v];
 				const float x = dot(axis, point);
 				const float y = dot(Vector2(-axis.y, axis.x), point);
@@ -2294,28 +2287,28 @@ public:
 
 private:
 	// Compute the convex hull using Graham Scan.
-	void convexHull(const Vector2 *input, uint32_t inputCount, Array<Vector2> &output, float epsilon)
+	void convexHull(ConstArrayView<Vector2> input, Array<Vector2> &output, float epsilon)
 	{
-		m_coords.resize(inputCount);
-		for (uint32_t i = 0; i < inputCount; i++)
+		m_coords.resize(input.length);
+		for (uint32_t i = 0; i < input.length; i++)
 			m_coords[i] = input[i].x;
 		m_radix.sort(m_coords);
 		const uint32_t *ranks = m_radix.ranks();
 		m_top.clear();
 		m_bottom.clear();
-		m_top.reserve(inputCount);
-		m_bottom.reserve(inputCount);
+		m_top.reserve(input.length);
+		m_bottom.reserve(input.length);
 		Vector2 P = input[ranks[0]];
-		Vector2 Q = input[ranks[inputCount - 1]];
+		Vector2 Q = input[ranks[input.length - 1]];
 		float topy = max(P.y, Q.y);
 		float boty = min(P.y, Q.y);
-		for (uint32_t i = 0; i < inputCount; i++) {
+		for (uint32_t i = 0; i < input.length; i++) {
 			Vector2 p = input[ranks[i]];
 			if (p.y >= boty)
 				m_top.push_back(p);
 		}
-		for (uint32_t i = 0; i < inputCount; i++) {
-			Vector2 p = input[ranks[inputCount - 1 - i]];
+		for (uint32_t i = 0; i < input.length; i++) {
+			Vector2 p = input[ranks[input.length - 1 - i]];
 			if (p.y <= topy)
 				m_bottom.push_back(p);
 		}
@@ -3313,8 +3306,11 @@ class TaskScheduler
 public:
 	~TaskScheduler()
 	{
-		for (uint32_t i = 0; i < m_groups.size(); i++)
-			destroyGroup({ i });
+		for (uint32_t i = 0; i < m_groups.size(); i++) {
+			TaskGroupHandle handle;
+			handle.value = i;
+			destroyGroup(handle);
+		}
 	}
 
 	uint32_t threadCount() const
@@ -3466,12 +3462,12 @@ struct Triangulator
 {
 	// This is doing a simple ear-clipping algorithm that skips invalid triangles. Ideally, we should
 	// also sort the ears by angle, start with the ones that have the smallest angle and proceed in order.
-	void triangulatePolygon(ConstArrayView<Vector3> vertices, uint32_t *inputIndices, uint32_t inputIndexCount, Array<uint32_t> &outputIndices)
+	void triangulatePolygon(ConstArrayView<Vector3> vertices, ConstArrayView<uint32_t> inputIndices, Array<uint32_t> &outputIndices)
 	{
 		m_polygonVertices.clear();
-		m_polygonVertices.reserve(inputIndexCount);
+		m_polygonVertices.reserve(inputIndices.length);
 		outputIndices.clear();
-		if (inputIndexCount == 3) {
+		if (inputIndices.length == 3) {
 			// Simple case for triangles.
 			outputIndices.push_back(inputIndices[0]);
 			outputIndices.push_back(inputIndices[1]);
@@ -3485,12 +3481,12 @@ struct Triangulator
 			basis.normal = normalize(cross(vertices[inputIndices[1]] - vertices[inputIndices[0]], vertices[inputIndices[2]] - vertices[inputIndices[1]]));
 			basis.tangent = basis.computeTangent(basis.normal);
 			basis.bitangent = basis.computeBitangent(basis.normal, basis.tangent);
-			const uint32_t edgeCount = inputIndexCount;
+			const uint32_t edgeCount = inputIndices.length;
 			m_polygonPoints.clear();
 			m_polygonPoints.reserve(edgeCount);
 			m_polygonAngles.clear();
 			m_polygonAngles.reserve(edgeCount);
-			for (uint32_t i = 0; i < inputIndexCount; i++) {
+			for (uint32_t i = 0; i < inputIndices.length; i++) {
 				m_polygonVertices.push_back(inputIndices[i]);
 				const Vector3 &pos = vertices[inputIndices[i]];
 				m_polygonPoints.push_back(Vector2(dot(basis.tangent, pos), dot(basis.bitangent, pos)));
@@ -3562,7 +3558,8 @@ private:
 class UniformGrid2
 {
 public:
-	void reset(const Vector2 *positions, const uint32_t *indices = nullptr, uint32_t reserveEdgeCount = 0)
+	// indices are optional.
+	void reset(ConstArrayView<Vector2> positions, ConstArrayView<uint32_t> indices = ConstArrayView<uint32_t>(), uint32_t reserveEdgeCount = 0)
 	{
 		m_edges.clear();
 		if (reserveEdgeCount > 0)
@@ -3850,12 +3847,12 @@ private:
 
 	uint32_t vertexAt(uint32_t index) const
 	{
-		return m_indices ? m_indices[index] : index;
+		return m_indices.length > 0 ? m_indices[index] : index;
 	}
 
 	Array<uint32_t> m_edges;
-	const Vector2 *m_positions;
-	const uint32_t *m_indices; // Optional
+	ConstArrayView<Vector2> m_positions;
+	ConstArrayView<uint32_t> m_indices; // Optional. Empty if unused.
 	float m_cellSize;
 	Vector2 m_gridOrigin;
 	uint32_t m_gridWidth, m_gridHeight; // in cells
@@ -5104,7 +5101,7 @@ struct OriginalUvCharts
 				for (uint32_t i = 0; i < 3; i++)
 					m_tempPoints[f * 3 + i] = m_data.mesh->position(m_data.mesh->vertexAt(face * 3 + i));
 			}
-			Fit::computeBasis(m_tempPoints.data(), m_tempPoints.size(), &m_chartBasis[c]);
+			Fit::computeBasis(m_tempPoints, &m_chartBasis[c]);
 		}
 	}
 
@@ -5679,7 +5676,7 @@ private:
 			for (uint32_t j = 0; j < 3; j++)
 				m_tempPoints[i * 3 + j] = m_data.mesh->position(m_data.mesh->vertexAt(f * 3 + j));
 		}
-		return Fit::computeBasis(m_tempPoints.data(), m_tempPoints.size(), basis);
+		return Fit::computeBasis(m_tempPoints, basis);
 	}
 
 	bool isFaceFlipped(uint32_t face) const
@@ -5719,7 +5716,7 @@ private:
 		// Check for boundary intersection in the parameterization.
 		XA_PROFILE_START(clusteredChartsPlaceSeedsBoundaryIntersection)
 		XA_PROFILE_START(clusteredChartsGrowBoundaryIntersection)
-		m_boundaryGrid.reset(m_texcoords.data());
+		m_boundaryGrid.reset(m_texcoords);
 		for (uint32_t i = 0; i < faceCount; i++) {
 			const uint32_t f = chart->faces[i];
 			for (uint32_t j = 0; j < 3; j++) {
@@ -6588,7 +6585,7 @@ struct PiecewiseParam
 	}
 
 	ConstArrayView<uint32_t> chartFaces() const { return m_patch; }
-	const Vector2 *texcoords() const { return m_texcoords.data(); }
+	ConstArrayView<Vector2> texcoords() const { return m_texcoords; }
 
 	bool computeChart()
 	{
@@ -6616,7 +6613,7 @@ struct PiecewiseParam
 			}
 			addFaceToPatch(seed);
 			// Initialize the boundary grid.
-			m_boundaryGrid.reset(m_texcoords.data(), m_mesh->indices().data);
+			m_boundaryGrid.reset(m_texcoords, m_mesh->indices());
 			for (Mesh::FaceEdgeIterator it(m_mesh, seed); !it.isDone(); it.advance())
 				m_boundaryGrid.append(it.edge());
 			break;
@@ -6705,7 +6702,7 @@ struct PiecewiseParam
 				removeLinkedCandidates(bestCandidate);
 				// Reset the grid with all edges on the patch boundary.
 				XA_PROFILE_START(parameterizeChartsPiecewiseBoundaryIntersection)
-				m_boundaryGrid.reset(m_texcoords.data(), m_mesh->indices().data);
+				m_boundaryGrid.reset(m_texcoords, m_mesh->indices());
 				for (uint32_t i = 0; i < m_patch.size(); i++) {
 					for (Mesh::FaceEdgeIterator it(m_mesh, m_patch[i]); !it.isDone(); it.advance()) {
 						const uint32_t oface = it.oppositeFace();
@@ -6990,7 +6987,7 @@ struct Quality
 	{
 		const Array<uint32_t> &boundaryEdges = mesh->boundaryEdges();
 		const uint32_t boundaryEdgeCount = boundaryEdges.size();
-		boundaryGrid.reset(mesh->texcoords().data, mesh->indices().data, boundaryEdgeCount);
+		boundaryGrid.reset(mesh->texcoords(), mesh->indices(), boundaryEdgeCount);
 		for (uint32_t i = 0; i < boundaryEdgeCount; i++)
 			boundaryGrid.append(boundaryEdges[i]);
 		boundaryIntersection = boundaryGrid.intersect(mesh->epsilon());
@@ -7199,7 +7196,7 @@ public:
 #endif
 	}
 
-	Chart(ChartCtorBuffers &buffers, const Chart *parent, const Mesh *parentMesh, ConstArrayView<uint32_t> faces, const Vector2 *texcoords, const Mesh *sourceMesh) : m_unifiedMesh(nullptr), m_type(ChartType::Piecewise), m_generatorType(segment::ChartGeneratorType::Piecewise), m_tjunctionCount(0), m_originalVertexCount(0), m_isInvalid(false)
+	Chart(ChartCtorBuffers &buffers, const Chart *parent, const Mesh *parentMesh, ConstArrayView<uint32_t> faces, ConstArrayView<Vector2> texcoords, const Mesh *sourceMesh) : m_unifiedMesh(nullptr), m_type(ChartType::Piecewise), m_generatorType(segment::ChartGeneratorType::Piecewise), m_tjunctionCount(0), m_originalVertexCount(0), m_isInvalid(false)
 	{
 		const uint32_t faceCount = faces.length;
 		m_faceToSourceFaceMap.resize(faceCount);
@@ -7274,7 +7271,7 @@ public:
 
 	uint32_t originalVertexToUnifiedVertex(uint32_t v) const { return m_chartVertexToUnifiedVertexMap[v]; }
 
-	const uint32_t *originalVertices() const { return m_originalIndices.data(); }
+	ConstArrayView<uint32_t> originalVertices() const { return m_originalIndices; }
 
 	void parameterize(const ChartOptions &options, UniformGrid2 &boundaryGrid)
 	{
@@ -8084,12 +8081,10 @@ struct Chart
 {
 	int32_t atlasIndex;
 	uint32_t material;
-	uint32_t indexCount;
-	const uint32_t *indices;
+	ConstArrayView<uint32_t> indices;
 	float parametricArea;
 	float surfaceArea;
-	Vector2 *vertices;
-	uint32_t vertexCount;
+	ArrayView<Vector2> vertices;
 	Array<uint32_t> uniqueVertices;
 	// bounding box
 	Vector2 majorAxis, minorAxis, minCorner, maxCorner;
@@ -8099,7 +8094,7 @@ struct Chart
 	Array<uint32_t> faces;
 
 	Vector2 &uniqueVertexAt(uint32_t v) { return uniqueVertices.isEmpty() ? vertices[v] : vertices[uniqueVertices[v]]; }
-	uint32_t uniqueVertexCount() const { return uniqueVertices.isEmpty() ? vertexCount : uniqueVertices.size(); }
+	uint32_t uniqueVertexCount() const { return uniqueVertices.isEmpty() ? vertices.length : uniqueVertices.size(); }
 };
 
 struct AddChartTaskArgs
@@ -8121,8 +8116,7 @@ static void runAddChartTask(void *groupUserData, void *taskUserData)
 	Chart *chart = args->chart = XA_NEW(MemTag::Default, Chart);
 	chart->atlasIndex = -1;
 	chart->material = 0;
-	chart->indexCount = mesh->indexCount();
-	chart->indices = mesh->indices().data;
+	chart->indices = mesh->indices();
 	chart->parametricArea = mesh->computeParametricArea();
 	if (chart->parametricArea < kAreaEpsilon) {
 		// When the parametric area is too small we use a rough approximation to prevent divisions by very small numbers.
@@ -8130,17 +8124,16 @@ static void runAddChartTask(void *groupUserData, void *taskUserData)
 		chart->parametricArea = bounds.x * bounds.y;
 	}
 	chart->surfaceArea = mesh->computeSurfaceArea();
-	chart->vertices = mesh->texcoords().data;
-	chart->vertexCount = mesh->vertexCount();
+	chart->vertices = mesh->texcoords();
 	chart->boundaryEdges = &mesh->boundaryEdges();
 	// Compute bounding box of chart.
 	BoundingBox2D &bb = boundingBox->get();
 	bb.clear();
-	for (uint32_t v = 0; v < chart->vertexCount; v++) {
+	for (uint32_t v = 0; v < chart->vertices.length; v++) {
 		if (mesh->isBoundaryVertex(v))
 			bb.appendBoundaryVertex(mesh->texcoord(v));
 	}
-	bb.compute(mesh->texcoords().data, mesh->vertexCount());
+	bb.compute(mesh->texcoords());
 	chart->majorAxis = bb.majorAxis;
 	chart->minorAxis = bb.minorAxis;
 	chart->minCorner = bb.minCorner;
@@ -8229,16 +8222,14 @@ struct Atlas
 			Chart *chart = XA_NEW(MemTag::Default, Chart);
 			chart->atlasIndex = -1;
 			chart->material = uvChart->material;
-			chart->indexCount = uvChart->indices.size();
-			chart->indices = uvChart->indices.data();
-			chart->vertices = mesh->texcoords.data();
-			chart->vertexCount = mesh->texcoords.size();
+			chart->indices = uvChart->indices;
+			chart->vertices = mesh->texcoords;
 			chart->boundaryEdges = nullptr;
 			chart->faces.resize(uvChart->faces.size());
 			memcpy(chart->faces.data(), uvChart->faces.data(), sizeof(uint32_t) * uvChart->faces.size());
 			// Find unique vertices.
 			vertexUsed.zeroOutMemory();
-			for (uint32_t i = 0; i < chart->indexCount; i++) {
+			for (uint32_t i = 0; i < chart->indices.length; i++) {
 				const uint32_t vertex = chart->indices[i];
 				if (!vertexUsed.get(vertex)) {
 					vertexUsed.set(vertex);
@@ -8247,7 +8238,7 @@ struct Atlas
 			}
 			// Compute parametric and surface areas.
 			chart->parametricArea = 0.0f;
-			for (uint32_t f = 0; f < chart->indexCount / 3; f++) {
+			for (uint32_t f = 0; f < chart->indices.length / 3; f++) {
 				const Vector2 &v1 = chart->vertices[chart->indices[f * 3 + 0]];
 				const Vector2 &v2 = chart->vertices[chart->indices[f * 3 + 1]];
 				const Vector2 &v3 = chart->vertices[chart->indices[f * 3 + 2]];
@@ -8299,19 +8290,25 @@ struct Atlas
 			return true;
 		}
 		// Estimate resolution and/or texels per unit if not specified.
-		const float* texelsPerUnit = options.texelsPerUnit;
+		m_texelsPerUnit = options.texelsPerUnit;
 		uint32_t resolution = options.resolution > 0 ? options.resolution + options.padding * 2 : 0;
-		const uint32_t maxResolution = texelsPerUnit != nullptr ? resolution : 0;
-		if (resolution <= 0 || texelsPerUnit == nullptr) {
-			if (resolution <= 0 && texelsPerUnit == nullptr)
+		const uint32_t maxResolution = m_texelsPerUnit > 0.0f ? resolution : 0;
+		if (resolution <= 0 || m_texelsPerUnit <= 0) {
+			if (resolution <= 0 && m_texelsPerUnit <= 0)
 				resolution = 1024;
 			float meshArea = 0;
 			for (uint32_t c = 0; c < chartCount; c++)
-				meshArea += m_charts[c]->surfaceArea * square(texelsPerUnit[m_charts[c]->material]);
+				meshArea += m_charts[c]->surfaceArea;
 			if (resolution <= 0) {
 				// Estimate resolution based on the mesh surface area and given texel scale.
-				const float texelCount = max(1.0f, meshArea / 0.75f); // Assume 75% utilization.
+				const float texelCount = max(1.0f, meshArea * square(m_texelsPerUnit) / 0.75f); // Assume 75% utilization.
 				resolution = max(1u, nextPowerOfTwo(uint32_t(sqrtf(texelCount))));
+			}
+			if (m_texelsPerUnit <= 0) {
+				// Estimate a suitable texelsPerUnit to fit the given resolution.
+				const float texelCount = max(1.0f, meshArea / 0.75f); // Assume 75% utilization.
+				m_texelsPerUnit = sqrtf((resolution * resolution) / texelCount);
+				XA_PRINT("   Estimating texelsPerUnit as %g\n", m_texelsPerUnit);
 			}
 		}
 		Array<float> chartOrderArray;
@@ -8324,7 +8321,7 @@ struct Atlas
 			// Compute chart scale
 			float scale = 1.0f;
 			if (chart->parametricArea != 0.0f) {
-				scale = sqrtf(chart->surfaceArea / chart->parametricArea) * texelsPerUnit[chart->material];
+				scale = sqrtf(chart->surfaceArea / chart->parametricArea) * m_texelsPerUnit;
 				XA_ASSERT(isFinite(scale));
 			}
 			// Translate, rotate and scale vertices. Compute extents.
@@ -8455,7 +8452,7 @@ struct Atlas
 					chartImageBilinearRotated.resize(chartImage.height(), chartImage.width(), true);
 			}
 			// Rasterize chart faces.
-			const uint32_t faceCount = chart->indexCount / 3;
+			const uint32_t faceCount = chart->indices.length / 3;
 			for (uint32_t f = 0; f < faceCount; f++) {
 				Vector2 vertices[3];
 				for (uint32_t v = 0; v < 3; v++)
@@ -8800,7 +8797,7 @@ private:
 			for (uint32_t i = 0; i < edgeCount; i++)
 				boundaryEdgeGrid.append((*chart->boundaryEdges)[i]);
 		} else {
-			for (uint32_t i = 0; i < chart->indexCount; i++)
+			for (uint32_t i = 0; i < chart->indices.length; i++)
 				boundaryEdgeGrid.append(i);
 		}
 		const int xOffsets[] = { -1, 0, 1, -1, 1, -1, 0, 1 };
@@ -9171,7 +9168,7 @@ AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountH
 			triIndices.push_back(polygon[1]);
 			triIndices.push_back(polygon[2]);
 		} else {
-			triangulator.triangulatePolygon(mesh->positions(), polygon, faceVertexCount, triIndices);
+			triangulator.triangulatePolygon(mesh->positions(), internal::ConstArrayView<uint32_t>(polygon, faceVertexCount), triIndices);
 		}
 		// Check for zero area faces.
 		if (!ignore) {
@@ -9578,6 +9575,10 @@ void PackCharts(Atlas *atlas, PackOptions packOptions)
 		XA_PRINT_WARNING("PackCharts: ComputeCharts must be called first.\n");
 		return;
 	}
+	if (packOptions.texelsPerUnit < 0.0f) {
+		XA_PRINT_WARNING("PackCharts: PackOptions::texelsPerUnit is negative.\n");
+		packOptions.texelsPerUnit = 0.0f;
+	}
 	// Cleanup atlas.
 	DestroyOutputMeshes(ctx);
 	if (atlas->utilization) {
@@ -9608,6 +9609,7 @@ void PackCharts(Atlas *atlas, PackOptions packOptions)
 	atlas->chartCount = packAtlas.getChartCount();
 	atlas->width = packAtlas.getWidth();
 	atlas->height = packAtlas.getHeight();
+	atlas->texelsPerUnit = packAtlas.getTexelsPerUnit();
 	if (atlas->atlasCount > 0) {
 		atlas->utilization = XA_ALLOC_ARRAY(internal::MemTag::Default, float, atlas->atlasCount);
 		for (uint32_t i = 0; i < atlas->atlasCount; i++)
@@ -9935,90 +9937,6 @@ const char *StringForEnum(ProgressCategory category)
 	if (category == ProgressCategory::BuildOutputMeshes)
 		return "Building output meshes";
 	return "";
-}
-
-/**
- * @brief Call after ComputeCharts to extract chart info from the xatlas
- * @param atlas pointer to the xatlas (after ComputeCharts was called)
- * @param vertices output vector will be filled with chart parametrization
- *                 (after filling it should have 3 * nMeshFaces vertices)
- * @param meshId id of the mesh for which the chart parametrization
- * 				 should be extracted
- */
-void ExtractCharts(const Atlas* atlas, std::vector<Vertex>& vertices,
-				   uint32_t meshId)
-{
-	// Validate arguments and context state.
-	if (!atlas) {
-		XA_PRINT_WARNING("ExtractCharts: atlas is null.\n");
-		return;
-	}
-
-	const Context *ctx = (const Context *)atlas;
-	if (ctx->meshes.isEmpty()) {
-		XA_PRINT_WARNING("ExtractCharts: No meshes. Call AddMesh first.\n");
-		return;
-	}
-	if (meshId >= ctx->meshes.size()) {
-		XA_PRINT_WARNING("ExtractCharts: Mesh with specified meshId not found.\n");
-		return;
-	}
-	if (!ctx->paramAtlas.chartsComputed()) {
-		XA_PRINT_WARNING("ExtractCharts: ComputeCharts must be called first.\n");
-		return;
-	}
-
-	Vertex invalidData { -1, -1, {0, 0}, 0 };
-	size_t vcnt = 0;
-	for (uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid) {
-		const internal::param::ChartGroup& chartGroup = *ctx->paramAtlas.chartGroupAt(meshId, gid);
-		for (uint32_t id = 0; id < chartGroup.chartCount(); ++id) {
-			const internal::param::Chart& chart = *chartGroup.chartAt(id);
-			const internal::Mesh& mesh = *chart.unifiedMesh();
-			for (uint32_t fi = 0; fi < mesh.faceCount(); ++fi) {
-				vcnt = vcnt + 3;
-			}
-		}
-	}
-	vertices.resize(vcnt, invalidData);
-
-	for (uint32_t gid = 0; gid < ctx->paramAtlas.chartGroupCount(meshId); ++gid)
-	{
-		const internal::param::ChartGroup& chartGroup = *ctx->paramAtlas.chartGroupAt(meshId, gid);
-		for (uint32_t id = 0; id < chartGroup.chartCount(); ++id)
-		{
-			const internal::param::Chart& chart = *chartGroup.chartAt(id);
-			const internal::Mesh& mesh = *chart.unifiedMesh();
-
-			// atlasId is not used, store local chart id (in this group)
-			int32_t atlasIndex = chart.isInvalid() ? -1
-												   : static_cast<int32_t>(id);
-			// use chart group id as chartIndex
-			int32_t chartIndex = chart.isInvalid() ? -1
-												   : static_cast<int32_t>(gid);
-
-			XA_ASSERT(chart.isInvalid() == false);
-
-			for (uint32_t fi = 0; fi < mesh.faceCount(); ++fi)
-			{
-				uint32_t sourceFaceId = chart.mapFaceToSourceFace(fi);
-
-				for (int k = 0; k < 3; ++k)
-				{
-					uint32_t vi = mesh.vertexAt(3 * fi + k);
-					uint32_t sourceVi = chart.mapChartVertexToSourceVertex(vi);
-
-					// safe access with bound checking
-					Vertex& vertex = vertices.at(3 * sourceFaceId + k);
-					vertex.atlasIndex = atlasIndex;
-					vertex.chartIndex = chartIndex;
-					vertex.uv[0] = mesh.texcoord(vi).x;
-					vertex.uv[1] = mesh.texcoord(vi).y;
-					vertex.xref = sourceVi;
-				}
-			}
-		}
-	}
 }
 
 } // namespace xatlas
