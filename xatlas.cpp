@@ -8294,8 +8294,10 @@ struct Atlas
 		uint32_t resolution = options.resolution > 0 ? options.resolution + options.padding * 2 : 0;
 		const uint32_t maxResolution = m_texelsPerUnit > 0.0f ? resolution : 0;
 		if (resolution <= 0 || m_texelsPerUnit <= 0) {
-			if (resolution <= 0 && m_texelsPerUnit <= 0)
+			if (resolution <= 0 && m_texelsPerUnit <= 0) {
+				//resolution = 16364;
 				resolution = 1024;
+			}
 			float meshArea = 0;
 			for (uint32_t c = 0; c < chartCount; c++)
 				meshArea += m_charts[c]->surfaceArea;
