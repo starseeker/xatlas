@@ -35,34 +35,20 @@ Copyright NVIDIA Corporation 2006 -- Ignacio Castano <icastano@nvidia.com>
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef XATLAS_EXPORT
+#  if defined(XATLAS_DLL_EXPORTS) && defined(XATLAS_DLL_IMPORTS)
+#    error "Only XATLAS_DLL_EXPORTS or XATLAS_DLL_IMPORTS can be defined, not both."
+#  elif defined(XATLAS_DLL_EXPORTS)
+#    define XATLAS_EXPORT COMPILER_DLLEXPORT
+#  elif defined(XATLAS_DLL_IMPORTS)
+#    define XATLAS_EXPORT COMPILER_DLLIMPORT
+#  else
+#    define XATLAS_EXPORT
+#  endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#ifndef XATLAS_EXPORT_API
-#define XATLAS_EXPORT_API 0
-#endif
-
-#ifndef XATLAS_IMPORT_API
-#define XATLAS_IMPORT_API 0
-#endif
-
-#ifndef XATLAS_API
-	#if XATLAS_EXPORT_API
-		#ifdef _MSC_VER
-			#define XATLAS_API __declspec(dllexport)
-		#else
-			#define XATLAS_API __attribute__((visibility("default")))
-		#endif
-	#elif XATLAS_IMPORT_API
-		#ifdef _MSC_VER
-			#define XATLAS_API __declspec(dllimport)
-		#else
-			#define XATLAS_API
-		#endif
-	#else
-		#define XATLAS_API
-	#endif
 #endif
 
 typedef enum
@@ -223,23 +209,23 @@ typedef void *(*xatlasReallocFunc)(void *, size_t);
 typedef void (*xatlasFreeFunc)(void *);
 typedef int (*xatlasPrintFunc)(const char *, ...);
 
-XATLAS_API xatlasAtlas *xatlasCreate();
-XATLAS_API void xatlasDestroy(xatlasAtlas *atlas);
-XATLAS_API xatlasAddMeshError xatlasAddMesh(xatlasAtlas *atlas, const xatlasMeshDecl *meshDecl, uint32_t meshCountHint);
-XATLAS_API void xatlasAddMeshJoin(xatlasAtlas *atlas);
-XATLAS_API xatlasAddMeshError xatlasAddUvMesh(xatlasAtlas *atlas, const xatlasUvMeshDecl *decl);
-XATLAS_API void xatlasComputeCharts(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions);
-XATLAS_API void xatlasPackCharts(xatlasAtlas *atlas, const xatlasPackOptions *packOptions);
-XATLAS_API void xatlasGenerate(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions, const xatlasPackOptions *packOptions);
-XATLAS_API void xatlasSetProgressCallback(xatlasAtlas *atlas, xatlasProgressFunc progressFunc, void *progressUserData);
-XATLAS_API void xatlasSetAlloc(xatlasReallocFunc reallocFunc, xatlasFreeFunc freeFunc);
-XATLAS_API void xatlasSetPrint(xatlasPrintFunc print, bool verbose);
-XATLAS_API const char *xatlasAddMeshErrorString(xatlasAddMeshError error);
-XATLAS_API const char *xatlasProgressCategoryString(xatlasProgressCategory category);
-XATLAS_API void xatlasMeshDeclInit(xatlasMeshDecl *meshDecl);
-XATLAS_API void xatlasUvMeshDeclInit(xatlasUvMeshDecl *uvMeshDecl);
-XATLAS_API void xatlasChartOptionsInit(xatlasChartOptions *chartOptions);
-XATLAS_API void xatlasPackOptionsInit(xatlasPackOptions *packOptions);
+XATLAS_EXPORT xatlasAtlas *xatlasCreate();
+XATLAS_EXPORT void xatlasDestroy(xatlasAtlas *atlas);
+XATLAS_EXPORT xatlasAddMeshError xatlasAddMesh(xatlasAtlas *atlas, const xatlasMeshDecl *meshDecl, uint32_t meshCountHint);
+XATLAS_EXPORT void xatlasAddMeshJoin(xatlasAtlas *atlas);
+XATLAS_EXPORT xatlasAddMeshError xatlasAddUvMesh(xatlasAtlas *atlas, const xatlasUvMeshDecl *decl);
+XATLAS_EXPORT void xatlasComputeCharts(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions);
+XATLAS_EXPORT void xatlasPackCharts(xatlasAtlas *atlas, const xatlasPackOptions *packOptions);
+XATLAS_EXPORT void xatlasGenerate(xatlasAtlas *atlas, const xatlasChartOptions *chartOptions, const xatlasPackOptions *packOptions);
+XATLAS_EXPORT void xatlasSetProgressCallback(xatlasAtlas *atlas, xatlasProgressFunc progressFunc, void *progressUserData);
+XATLAS_EXPORT void xatlasSetAlloc(xatlasReallocFunc reallocFunc, xatlasFreeFunc freeFunc);
+XATLAS_EXPORT void xatlasSetPrint(xatlasPrintFunc print, bool verbose);
+XATLAS_EXPORT const char *xatlasAddMeshErrorString(xatlasAddMeshError error);
+XATLAS_EXPORT const char *xatlasProgressCategoryString(xatlasProgressCategory category);
+XATLAS_EXPORT void xatlasMeshDeclInit(xatlasMeshDecl *meshDecl);
+XATLAS_EXPORT void xatlasUvMeshDeclInit(xatlasUvMeshDecl *uvMeshDecl);
+XATLAS_EXPORT void xatlasChartOptionsInit(xatlasChartOptions *chartOptions);
+XATLAS_EXPORT void xatlasPackOptionsInit(xatlasPackOptions *packOptions);
 
 #ifdef __cplusplus
 } // extern "C"

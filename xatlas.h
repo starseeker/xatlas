@@ -34,6 +34,18 @@ Copyright NVIDIA Corporation 2006 -- Ignacio Castano <icastano@nvidia.com>
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef XATLAS_EXPORT
+#  if defined(XATLAS_DLL_EXPORTS) && defined(XATLAS_DLL_IMPORTS)
+#    error "Only XATLAS_DLL_EXPORTS or XATLAS_DLL_IMPORTS can be defined, not both."
+#  elif defined(XATLAS_DLL_EXPORTS)
+#    define XATLAS_EXPORT COMPILER_DLLEXPORT
+#  elif defined(XATLAS_DLL_IMPORTS)
+#    define XATLAS_EXPORT COMPILER_DLLIMPORT
+#  else
+#    define XATLAS_EXPORT
+#  endif
+#endif
+
 namespace xatlas {
 
 enum class ChartType
@@ -46,7 +58,7 @@ enum class ChartType
 };
 
 // A group of connected faces, belonging to a single atlas.
-struct Chart
+XATLAS_EXPORT struct Chart
 {
 	uint32_t *faceArray;
 	uint32_t atlasIndex; // Sub-atlas index.
@@ -56,7 +68,7 @@ struct Chart
 };
 
 // Output vertex.
-struct Vertex
+XATLAS_EXPORT struct Vertex
 {
 	int32_t atlasIndex; // Sub-atlas index. -1 if the vertex doesn't exist in any atlas.
 	int32_t chartIndex; // -1 if the vertex doesn't exist in any chart.
@@ -65,7 +77,7 @@ struct Vertex
 };
 
 // Output mesh.
-struct Mesh
+XATLAS_EXPORT struct Mesh
 {
 	Chart *chartArray;
 	uint32_t *indexArray;
@@ -81,7 +93,7 @@ static const uint32_t kImageIsBilinearBit = 0x40000000;
 static const uint32_t kImageIsPaddingBit = 0x20000000;
 
 // Empty on creation. Populated after charts are packed.
-struct Atlas
+XATLAS_EXPORT struct Atlas
 {
 	uint32_t *image;
 	Mesh *meshes; // The output meshes, corresponding to each AddMesh call.
@@ -95,9 +107,9 @@ struct Atlas
 };
 
 // Create an empty atlas.
-Atlas *Create();
+XATLAS_EXPORT Atlas *Create();
 
-void Destroy(Atlas *atlas);
+XATLAS_EXPORT void Destroy(Atlas *atlas);
 
 enum class IndexFormat
 {
@@ -106,7 +118,7 @@ enum class IndexFormat
 };
 
 // Input mesh declaration.
-struct MeshDecl
+XATLAS_EXPORT struct MeshDecl
 {
 	const void *vertexPositionData = nullptr;
 	const void *vertexNormalData = nullptr; // optional
@@ -148,12 +160,12 @@ enum class AddMeshError
 };
 
 // Add a mesh to the atlas. MeshDecl data is copied, so it can be freed after AddMesh returns.
-AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountHint = 0);
+XATLAS_EXPORT AddMeshError AddMesh(Atlas *atlas, const MeshDecl &meshDecl, uint32_t meshCountHint = 0);
 
 // Wait for AddMesh async processing to finish. ComputeCharts / Generate call this internally.
-void AddMeshJoin(Atlas *atlas);
+XATLAS_EXPORT void AddMeshJoin(Atlas *atlas);
 
-struct UvMeshDecl
+XATLAS_EXPORT struct UvMeshDecl
 {
 	const void *vertexUvData = nullptr;
 	const void *indexData = nullptr; // optional
@@ -165,12 +177,12 @@ struct UvMeshDecl
 	IndexFormat indexFormat = IndexFormat::UInt16;
 };
 
-AddMeshError AddUvMesh(Atlas *atlas, const UvMeshDecl &decl);
+XATLAS_EXPORT AddMeshError AddUvMesh(Atlas *atlas, const UvMeshDecl &decl);
 
 // Custom parameterization function. texcoords initial values are an orthogonal parameterization.
 typedef void (*ParameterizeFunc)(const float *positions, float *texcoords, uint32_t vertexCount, const uint32_t *indices, uint32_t indexCount);
 
-struct ChartOptions
+XATLAS_EXPORT struct ChartOptions
 {
 	ParameterizeFunc paramFunc = nullptr;
 
@@ -192,9 +204,9 @@ struct ChartOptions
 };
 
 // Call after all AddMesh calls. Can be called multiple times to recompute charts with different options.
-void ComputeCharts(Atlas *atlas, ChartOptions options = ChartOptions());
+XATLAS_EXPORT void ComputeCharts(Atlas *atlas, ChartOptions options = ChartOptions());
 
-struct PackOptions
+XATLAS_EXPORT struct PackOptions
 {
 	// Charts larger than this will be scaled down. 0 means no limit.
 	uint32_t maxChartSize = 0;
@@ -232,10 +244,10 @@ struct PackOptions
 };
 
 // Call after ComputeCharts. Can be called multiple times to re-pack charts with different options.
-void PackCharts(Atlas *atlas, PackOptions packOptions = PackOptions());
+XATLAS_EXPORT void PackCharts(Atlas *atlas, PackOptions packOptions = PackOptions());
 
 // Equivalent to calling ComputeCharts and PackCharts in sequence. Can be called multiple times to regenerate with different options.
-void Generate(Atlas *atlas, ChartOptions chartOptions = ChartOptions(), PackOptions packOptions = PackOptions());
+XATLAS_EXPORT void Generate(Atlas *atlas, ChartOptions chartOptions = ChartOptions(), PackOptions packOptions = PackOptions());
 
 // Progress tracking.
 enum class ProgressCategory
@@ -249,20 +261,20 @@ enum class ProgressCategory
 // May be called from any thread. Return false to cancel.
 typedef bool (*ProgressFunc)(ProgressCategory category, int progress, void *userData);
 
-void SetProgressCallback(Atlas *atlas, ProgressFunc progressFunc = nullptr, void *progressUserData = nullptr);
+XATLAS_EXPORT void SetProgressCallback(Atlas *atlas, ProgressFunc progressFunc = nullptr, void *progressUserData = nullptr);
 
 // Custom memory allocation.
 typedef void *(*ReallocFunc)(void *, size_t);
 typedef void (*FreeFunc)(void *);
-void SetAlloc(ReallocFunc reallocFunc, FreeFunc freeFunc = nullptr);
+XATLAS_EXPORT void SetAlloc(ReallocFunc reallocFunc, FreeFunc freeFunc = nullptr);
 
 // Custom print function.
 typedef int (*PrintFunc)(const char *, ...);
-void SetPrint(PrintFunc print, bool verbose);
+XATLAS_EXPORT void SetPrint(PrintFunc print, bool verbose);
 
 // Helper functions for error messages.
-const char *StringForEnum(AddMeshError error);
-const char *StringForEnum(ProgressCategory category);
+XATLAS_EXPORT const char *StringForEnum(AddMeshError error);
+XATLAS_EXPORT const char *StringForEnum(ProgressCategory category);
 
 } // namespace xatlas
 
