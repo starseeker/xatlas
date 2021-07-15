@@ -14,3 +14,4 @@ set(xatlas_SOURCES xatlas.h xatlas_c.h xatlas.cpp)
 add_library(xatlas SHARED ${xatlas_SOURCES})
 
 add_subdirectory(examples)
+add_subdirectory(tests)
